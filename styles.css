@@ -59,8 +59,7 @@ nav {
     min-height: 100vh;
     position: relative;
     overflow: hidden;
-    /* scroll-snap-align: start;
-    scroll-snap-stop: always; */
+    scroll-margin-top: 60px; /* Prevent header overlap */
 }
 
 .hero-section {
@@ -198,64 +197,75 @@ nav {
     font-size: 1.5rem;
 }
 
-/* Image Container - Responsive */
-/* Image Container - Responsive */
-/* Image Container - Fixed centered position (UPDATED) */
-.image-container {
-    position: fixed;
-    top: 0; /* Changed from top: 0 */
-    left: 0;
-    /* transform: translate(-50%, -50%); Changed from translateX(-50%) */
-    z-index: 100;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+/* Image Reveal Section */
+.image-reveal-section {
+    position: relative;
+    min-height: 100vh;
     width: 100%;
-    max-width: 1200px;
-    height: 100vh;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Remove debug background for production:
+    background: rgba(255, 0, 0, 0.1) !important; 
+    */
 }
 
-/* Keep ALL your existing CSS below this point unchanged */
-.image-container.visible {
-    opacity: 1;
+/* Image Container - Always visible in section */
+.image-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10; /* Ensure it's above the section background */
+    /* Remove debug background for production:
+    background: rgba(0, 255, 0, 0.1) !important;
+    */
 }
 
 .image-wrapper {
     position: relative;
     width: 100%;
+    max-width: 1200px;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+/* Image styling with clipping transitions */
 .clipping-image {
     position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     object-fit: contain;
-    will-change: clip-path;
+    will-change: clip-path, z-index;
     max-width: 100%;
     max-height: 100%;
+    transition: clip-path 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none; /* Prevent images from blocking scroll */
+    /* Remove debug border for production:
+    border: 1px solid rgba(255, 255, 0, 0.5) !important;
+    */
 }
 
-/* Desktop: Full viewport height, maintain aspect ratio */
+/* Desktop image sizing */
 @media (min-width: 769px) {
     .clipping-image {
-        height: 100vh;
+        height: 80vh;
         width: auto;
-    }
-    
-    .image-wrapper {
-        justify-content: center;
     }
 }
 
-/* Mobile: Full viewport width, maintain aspect ratio */
+/* Mobile image sizing */
 @media (max-width: 768px) {
     .clipping-image {
-        width: 100vw;
+        width: 90vw;
         height: auto;
     }
     
@@ -265,18 +275,6 @@ nav {
     }
 }
 
-#image1 {
-    clip-path: inset(0% 0% 0% 0%);
-}
-
-#image2 {
-    clip-path: inset(100% 0% 0% 0%);
-}
-
-#image3 {
-    clip-path: inset(100% 0% 0% 0%);
-}
-
 .image-label {
     position: absolute;
     bottom: 40px;
@@ -286,109 +284,76 @@ nav {
     padding: 15px 25px;
     border-radius: 0 8px 8px 0;
     font-weight: 600;
-    z-index: 20;
+    z-index: 100; /* Above images */
     border-left: 4px solid #64ffda;
     font-size: 1.2rem;
+    transition: opacity 0.3s ease;
 }
 
-/* Remove the old mobile padding rule since we're handling it differently */
 @media (max-width: 768px) {
-    .image-container {
-        padding: 0;
-    }
-    
     .image-label {
         bottom: 20px;
         font-size: 1rem;
         padding: 10px 15px;
     }
 }
-/* .image-container {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 100;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.5s ease;
-    width: 100%;
-    max-width: 1200px;
-}
 
-.image-container.visible {
-    opacity: 1;
-}
-
-.image-wrapper {
-    position: relative;
-    width: 100%;
-    height: 100%;
-}
-
-.clipping-image {
+/* Scroll indicator inside section */
+.scroll-indicator {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: auto;
-    object-fit: contain;
-    will-change: clip-path;
-}
-
-@media (min-width: 769px) {
-    .clipping-image {
-        max-height: 100vh;
-        width: auto;
-        left: 50%;
-        transform: translateX(-50%);
-    }
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10, 25, 47, 0.8);
+    color: #64ffda;
+    padding: 12px 24px;
+    border-radius: 30px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 20;
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    animation: bounce 2s infinite;
 }
 
 @media (max-width: 768px) {
-    .clipping-image {
-        max-width: 100vw;
-        height: auto;
-    }
-    
-    .image-container {
-        padding: 0 20px;
+    .scroll-indicator {
+        bottom: 20px;
+        font-size: 0.8rem;
+        padding: 8px 16px;
     }
 }
 
-#image1 {
-    clip-path: inset(0% 0% 0% 0%);
+/* Scroll lock indicator */
+.scroll-lock-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(100, 255, 218, 0.15);
+    border: 1px solid #64ffda;
+    color: #64ffda;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    z-index: 1001;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    backdrop-filter: blur(10px);
+    transform: translateY(10px);
 }
 
-#image2 {
-    clip-path: inset(100% 0% 0% 0%);
+.scroll-lock-indicator.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
-#image3 {
-    clip-path: inset(100% 0% 0% 0%);
-}
-
-.image-label {
-    position: absolute;
-    bottom: 40px;
-    left: 0;
-    background-color: rgba(10, 25, 47, 0.85);
-    color: #e6f1ff;
-    padding: 15px 25px;
-    border-radius: 0 8px 8px 0;
-    font-weight: 600;
-    z-index: 20;
-    border-left: 4px solid #64ffda;
-    font-size: 1.2rem;
-} */
-
-.image-section {
-    background: transparent;
-    z-index: 50;
-}
-
-.section-spacer {
-    height: 100vh;
+/* Body scroll lock class */
+body.scroll-locked {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
 }
 
 /* Content Sections */
@@ -719,12 +684,6 @@ footer p {
     
     .nav-title {
         font-size: 1.2rem;
-    }
-    
-    .image-label {
-        bottom: 20px;
-        font-size: 1rem;
-        padding: 10px 15px;
     }
     
     .glass-cards {

@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Script loaded - initializing scroll lock...');
+    
     // DOM Elements
-    const imageContainer = document.getElementById('image-container');
+    const imageRevealSection = document.getElementById('image-reveal');
     const images = [
         document.getElementById('image1'),
         document.getElementById('image2'),
@@ -20,325 +22,1046 @@ document.addEventListener('DOMContentLoaded', function() {
     const debugOverlay = document.querySelector('.debug-overlay');
     
     // State
-    let currentImage = 0; // 0 = image1, 1 = image2, 2 = image3, -1 = hidden
-    let targetImage = -1;
-    let isAnimating = false;
-    let animationStart = 0;
-    const ANIMATION_DURATION = 800;
+    let currentImageIndex = 0;
+    let isTransitioning = false;
+    let isScrollLocked = false;
+    let scrollTimeout = null;
+    let lastScrollPosition = window.scrollY;
+    let scrollVelocity = 0;
+    let lastScrollTime = Date.now();
+    const TRANSITION_DURATION = 800;
     
-    // Scroll tracking
-    let lastScrollY = window.scrollY;
-    let scrollDirection = 'down';
-    let scrollThreshold = 50; // pixels to trigger transition
-    let scrollAccumulator = 0;
-    
-    // Section tracking
-    let sections = {};
-    let currentSection = null;
-    let nextScrollTriggersTransition = false;
+    // Create scroll lock indicator
+    const lockIndicator = document.createElement('div');
+    lockIndicator.className = 'scroll-lock-indicator';
+    lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+    document.body.appendChild(lockIndicator);
     
     // Toggle debug overlay
     let debugVisible = true;
     debugToggle.addEventListener('click', function() {
         debugVisible = !debugVisible;
-        if (debugVisible) {
-            debugOverlay.classList.remove('hidden');
-            debugToggle.innerHTML = '<i class="fas fa-code"></i> Hide Debug';
-        } else {
-            debugOverlay.classList.add('hidden');
-            debugToggle.innerHTML = '<i class="fas fa-code"></i> Show Debug';
-        }
+        debugOverlay.classList.toggle('hidden');
+        debugToggle.innerHTML = debugVisible ? 
+            '<i class="fas fa-code"></i> Hide Debug' : 
+            '<i class="fas fa-code"></i> Show Debug';
     });
     
-    // Initialize sections
-    function initSections() {
-        const sectionIds = [
-            'section-hero', 'section-about', 'section-buffer',
-            'section-image1', 'section-image2', 'section-image3',
-            'section-work', 'section-education', 'section-projects',
-            'section-military', 'section-hobbies', 'section-contact'
+    // Initialize images with proper clipping states
+    function initImages() {
+        console.log('Initializing images...');
+        images.forEach((img, index) => {
+            // Remove any existing transitions initially
+            img.style.transition = 'none';
+            
+            if (index === 0) {
+                // First image fully visible
+                img.style.clipPath = 'inset(0% 0% 0% 0%)';
+                img.style.opacity = '1';
+                img.style.zIndex = '10';
+            } else {
+                // Other images hidden at bottom
+                img.style.clipPath = 'inset(100% 0% 0% 0%)';
+                img.style.opacity = '1';
+                img.style.zIndex = (9 - index).toString();
+            }
+        });
+        
+        // Set transition for animation
+        setTimeout(() => {
+            images.forEach(img => {
+                img.style.transition = 'clip-path 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+            });
+        }, 100);
+    }
+    
+    // Check if section is in viewport (more permissive for fast scrolling)
+    function isSectionInViewport() {
+        if (!imageRevealSection) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        
+        // More permissive check for fast scrolling
+        // Check if any part of the section is in viewport
+        return rect.top < viewportHeight * 0.8 && rect.bottom > viewportHeight * 0.2;
+    }
+    
+    // Check if we're entering the section from above
+    function isEnteringSectionFromTop() {
+        if (!imageRevealSection) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        
+        // If top of section is in the upper half of viewport
+        return rect.top >= 0 && rect.top < viewportHeight * 0.5;
+    }
+    
+    // Check if we're at the section (more accurate for fast scrolling)
+    function isAtSection() {
+        if (!imageRevealSection) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        
+        // Check if section occupies majority of viewport
+        const sectionHeight = rect.bottom - rect.top;
+        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+        
+        return visibleHeight >= viewportHeight * 0.7; // 70% of viewport
+    }
+    
+    // Check if we've scrolled past the section
+    function isScrolledPastSection() {
+        if (!imageRevealSection) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        // If section top is above viewport (we've passed it)
+        return rect.top < -100;
+    }
+    
+    // Check if we're above the section (scrolling back up)
+    function isAboveSection() {
+        if (!imageRevealSection) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        // If section bottom is below viewport (we're above it)
+        return rect.bottom > window.innerHeight + 100;
+    }
+    
+    // Force lock to section (snap to it)
+    function snapToSection() {
+        console.log('Snapping to section...');
+        
+        // Immediately lock scroll
+        if (!isScrollLocked) {
+            lockScroll();
+        }
+        
+        // Snap to section smoothly
+        imageRevealSection.scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'start'
+        });
+        
+        // Reset image to first one
+        if (currentImageIndex !== 0) {
+            showImageImmediately(0);
+        }
+    }
+    
+    // Animate transition: current clips up, next reveals up
+    function animateTransitionToNext() {
+        if (isTransitioning || currentImageIndex >= images.length - 1) {
+            // If on last image, unlock scroll and go to next section
+            if (currentImageIndex >= images.length - 1 && !isTransitioning) {
+                unlockScroll();
+                // Scroll to next section
+                const nextSection = document.getElementById('section-work');
+                if (nextSection) {
+                    setTimeout(() => {
+                        nextSection.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                }
+            }
+            return;
+        }
+        
+        console.log(`Animating: Image ${currentImageIndex + 1} → Image ${currentImageIndex + 2}`);
+        isTransitioning = true;
+        
+        const currentImg = images[currentImageIndex];
+        const nextImg = images[currentImageIndex + 1];
+        const oldIndex = currentImageIndex;
+        const newIndex = currentImageIndex + 1;
+        
+        // Set z-index for proper stacking
+        currentImg.style.zIndex = '10';
+        nextImg.style.zIndex = '11'; // Next image on top during transition
+        
+        // Ensure next image starts from bottom
+        nextImg.style.clipPath = 'inset(100% 0% 0% 0%)';
+        
+        // Small delay to ensure styles are applied
+        setTimeout(() => {
+            // Animate: current clips out from bottom, next reveals from bottom
+            currentImg.style.clipPath = 'inset(0% 0% 100% 0%)'; // Clip up out of view
+            nextImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
+            
+            // Update label
+            const labels = ['Experiences', 'Details', 'Tech Stack'];
+            imageLabel.textContent = labels[newIndex];
+            navTitle.textContent = labels[newIndex];
+            
+            // Update debug
+            debugImageState.textContent = `Transition: ${oldIndex + 1} → ${newIndex + 1}`;
+            debugImage1.textContent = oldIndex === 0 ? 'Clipping up' : (newIndex === 0 ? 'Revealing' : 'Hidden');
+            debugImage2.textContent = oldIndex === 1 ? 'Clipping up' : (newIndex === 1 ? 'Revealing' : 'Hidden');
+            debugImage3.textContent = oldIndex === 2 ? 'Clipping up' : (newIndex === 2 ? 'Revealing' : 'Hidden');
+        }, 10);
+        
+        // Complete transition
+        setTimeout(() => {
+            currentImageIndex = newIndex;
+            
+            // Reset z-index
+            images.forEach((img, i) => {
+                img.style.zIndex = i === currentImageIndex ? '10' : (9 - i).toString();
+            });
+            
+            isTransitioning = false;
+            console.log(`Animation complete. Current image: ${currentImageIndex + 1}`);
+            
+            // If now on last image, show unlock hint
+            if (currentImageIndex === images.length - 1) {
+                lockIndicator.innerHTML = '<i class="fas fa-arrow-down"></i> Scroll to continue';
+            } else {
+                lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+            }
+        }, TRANSITION_DURATION);
+    }
+    
+    // Animate transition: current clips down, previous reveals down
+    function animateTransitionToPrevious() {
+        if (isTransitioning || currentImageIndex <= 0) {
+            // If on first image, unlock scroll and go to previous section
+            if (currentImageIndex <= 0 && !isTransitioning) {
+                unlockScroll();
+                // Scroll to previous section (buffer section)
+                const prevSection = document.getElementById('section-buffer');
+                if (prevSection) {
+                    setTimeout(() => {
+                        prevSection.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                }
+            }
+            return;
+        }
+        
+        console.log(`Animating: Image ${currentImageIndex + 1} → Image ${currentImageIndex}`);
+        isTransitioning = true;
+        
+        const currentImg = images[currentImageIndex];
+        const prevImg = images[currentImageIndex - 1];
+        const oldIndex = currentImageIndex;
+        const newIndex = currentImageIndex - 1;
+        
+        // Set z-index for proper stacking
+        currentImg.style.zIndex = '10';
+        prevImg.style.zIndex = '11'; // Previous image on top during transition
+        
+        // Ensure previous image starts from top (hidden)
+        prevImg.style.clipPath = 'inset(100% 0% 0% 0%)';
+        
+        // Small delay to ensure styles are applied
+        setTimeout(() => {
+            // Animate: current clips down out of view, previous reveals down
+            currentImg.style.clipPath = 'inset(100% 0% 0% 0%)'; // Clip down out of view
+            prevImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
+            
+            // Update label
+            const labels = ['Experiences', 'Details', 'Tech Stack'];
+            imageLabel.textContent = labels[newIndex];
+            navTitle.textContent = labels[newIndex];
+            
+            // Update debug
+            debugImageState.textContent = `Transition: ${oldIndex + 1} → ${newIndex + 1}`;
+            debugImage1.textContent = oldIndex === 0 ? 'Clipping down' : (newIndex === 0 ? 'Revealing' : 'Hidden');
+            debugImage2.textContent = oldIndex === 1 ? 'Clipping down' : (newIndex === 1 ? 'Revealing' : 'Hidden');
+            debugImage3.textContent = oldIndex === 2 ? 'Clipping down' : (newIndex === 2 ? 'Revealing' : 'Hidden');
+        }, 10);
+        
+        // Complete transition
+        setTimeout(() => {
+            currentImageIndex = newIndex;
+            
+            // Reset z-index
+            images.forEach((img, i) => {
+                img.style.zIndex = i === currentImageIndex ? '10' : (9 - i).toString();
+            });
+            
+            isTransitioning = false;
+            console.log(`Animation complete. Current image: ${currentImageIndex + 1}`);
+            
+            // If now on first image, show unlock hint for scrolling up
+            if (currentImageIndex === 0) {
+                lockIndicator.innerHTML = '<i class="fas fa-arrow-up"></i> Scroll to go back';
+            } else {
+                lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+            }
+        }, TRANSITION_DURATION);
+    }
+    
+    // Show image immediately (no animation)
+    function showImageImmediately(index) {
+        if (index < 0 || index >= images.length) return;
+        
+        console.log(`Showing image ${index + 1} immediately`);
+        currentImageIndex = index;
+        
+        images.forEach((img, i) => {
+            img.style.transition = 'none';
+            if (i === index) {
+                img.style.clipPath = 'inset(0% 0% 0% 0%)';
+                img.style.zIndex = '10';
+            } else {
+                img.style.clipPath = 'inset(100% 0% 0% 0%)';
+                img.style.zIndex = (9 - i).toString();
+            }
+        });
+        
+        // Update label
+        const labels = ['Experiences', 'Details', 'Tech Stack'];
+        imageLabel.textContent = labels[index];
+        navTitle.textContent = labels[index];
+        
+        // Restore transitions after a moment
+        setTimeout(() => {
+            images.forEach(img => {
+                img.style.transition = 'clip-path 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+            });
+        }, 50);
+        
+        // Update debug
+        debugImageState.textContent = `Image ${index + 1} visible`;
+        debugImage1.textContent = index === 0 ? 'Visible' : 'Hidden';
+        debugImage2.textContent = index === 1 ? 'Visible' : 'Hidden';
+        debugImage3.textContent = index === 2 ? 'Visible' : 'Hidden';
+    }
+    
+    // Lock scroll to section
+    function lockScroll() {
+        if (isScrollLocked) return;
+        
+        console.log('🔒 Locking scroll to image section');
+        isScrollLocked = true;
+        lockIndicator.classList.add('visible');
+        
+        // Show first image if not already showing
+        if (currentImageIndex !== 0) {
+            showImageImmediately(0);
+        }
+        
+        // Update lock indicator based on current image
+        if (currentImageIndex === 0) {
+            lockIndicator.innerHTML = '<i class="fas fa-arrow-up"></i> Scroll to go back';
+        } else if (currentImageIndex === images.length - 1) {
+            lockIndicator.innerHTML = '<i class="fas fa-arrow-down"></i> Scroll to continue';
+        } else {
+            lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+        }
+        
+        // Add scroll lock to body
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '100vh';
+        document.body.style.width = '100%';
+        
+        debugImageState.textContent = 'Scroll locked - Image 1 visible';
+    }
+    
+    // Unlock scroll
+    function unlockScroll() {
+        if (!isScrollLocked) return;
+        
+        console.log('🔓 Unlocking scroll');
+        isScrollLocked = false;
+        lockIndicator.classList.remove('visible');
+        
+        // Restore scroll
+        document.body.style.overflow = '';
+        document.body.style.height = '';
+        document.body.style.width = '';
+        
+        debugImageState.textContent = 'Scroll unlocked';
+    }
+    
+    // Handle wheel events for image transitions
+    function handleWheel(e) {
+        if (!isScrollLocked || isTransitioning) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (e.deltaY > 0) {
+            // Scrolling down - next image
+            animateTransitionToNext();
+        } else if (e.deltaY < 0) {
+            // Scrolling up - previous image
+            animateTransitionToPrevious();
+        }
+    }
+    
+    // Calculate scroll velocity
+    function calculateScrollVelocity(currentScroll) {
+        const now = Date.now();
+        const timeDelta = now - lastScrollTime;
+        const scrollDelta = currentScroll - lastScrollPosition;
+        
+        if (timeDelta > 0) {
+            scrollVelocity = Math.abs(scrollDelta / timeDelta);
+        }
+        
+        lastScrollTime = now;
+        lastScrollPosition = currentScroll;
+        
+        return scrollVelocity;
+    }
+    
+    // Handle touch events for mobile
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    
+    function handleTouchStart(e) {
+        if (!isScrollLocked || isTransitioning) return;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+    }
+    
+    function handleTouchEnd(e) {
+        if (!isScrollLocked || isTransitioning) return;
+        
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaY = touchStartY - touchEndY;
+        const deltaTime = Date.now() - touchStartTime;
+        
+        // Only trigger on significant swipe (min 50px) and quick enough (max 500ms)
+        if (Math.abs(deltaY) > 50 && deltaTime < 500) {
+            if (deltaY > 0) {
+                // Swipe down - next image
+                animateTransitionToNext();
+            } else {
+                // Swipe up - previous image
+                animateTransitionToPrevious();
+            }
+        }
+    }
+    
+    // Update header and debug info
+    function updateScrollInfo() {
+        const scrollY = window.scrollY || window.pageYOffset;
+        const sections = [
+            { id: 'section-hero', name: 'Welcome' },
+            { id: 'section-about', name: 'About Me' },
+            { id: 'section-buffer', name: 'Continue' },
+            { id: 'image-reveal', name: 'Image Reveal' },
+            { id: 'section-work', name: 'Work Experience' },
+            { id: 'section-education', name: 'Education' },
+            { id: 'section-projects', name: 'Projects' },
+            { id: 'section-military', name: 'Military' },
+            { id: 'section-hobbies', name: 'Hobbies' },
+            { id: 'section-contact', name: 'Contact' }
         ];
         
-        sectionIds.forEach(id => {
-            const el = document.getElementById(id);
+        // Find current section
+        let currentSectionName = 'Unknown';
+        for (const section of sections) {
+            const el = document.getElementById(section.id);
             if (el) {
-                sections[id] = {
-                    element: el,
-                    top: el.offsetTop,
-                    bottom: el.offsetTop + el.offsetHeight,
-                    height: el.offsetHeight
-                };
+                const elTop = el.offsetTop;
+                const elBottom = elTop + el.offsetHeight;
+                
+                if (scrollY >= elTop - 100 && scrollY < elBottom - 100) {
+                    currentSectionName = section.name;
+                    break;
+                }
             }
-        });
-    }
-    
-    // Get current section
-    function getCurrentSection() {
-        const scrollY = window.scrollY;
-        const viewportHeight = window.innerHeight;
-        const viewportCenter = scrollY + (viewportHeight / 2);
-        
-        for (const [id, section] of Object.entries(sections)) {
-            if (viewportCenter >= section.top && viewportCenter <= section.bottom) {
-                return id;
-            }
-        }
-        return null;
-    }
-    
-    // Update header
-    function updateHeader() {
-        const section = getCurrentSection();
-        if (!section) return;
-        
-        const sectionName = section.replace('section-', '').replace(/-/g, ' ');
-        const displayName = sectionName.replace(/\b\w/g, l => l.toUpperCase());
-        
-        // Special cases for image sections
-        if (section === 'section-image1') {
-            navTitle.textContent = 'Experiences';
-        } else if (section === 'section-image2') {
-            navTitle.textContent = 'Details';
-        } else if (section === 'section-image3') {
-            navTitle.textContent = 'Tech Stack';
-        } else {
-            navTitle.textContent = displayName;
-        }
-        
-        debugSection.textContent = displayName;
-    }
-    
-    // Start transition to new image
-    function transitionTo(newImageIndex) {
-        if (newImageIndex === currentImage || isAnimating) return;
-        
-        console.log(`Transition: ${currentImage} → ${newImageIndex}`);
-        
-        targetImage = newImageIndex;
-        isAnimating = true;
-        animationStart = Date.now();
-        
-        // Show container if transitioning to an image
-        if (newImageIndex >= 0) {
-            imageContainer.classList.add('visible');
-        }
-        
-        // Start animation
-        requestAnimationFrame(animateTransition);
-    }
-    
-    // Animation loop
-    function animateTransition() {
-        const now = Date.now();
-        const elapsed = now - animationStart;
-        let progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-        
-        // Apply easing
-        progress = easeInOutCubic(progress);
-        
-        // Apply transition based on direction
-        if (scrollDirection === 'down') {
-            applyTransitionDown(progress);
-        } else {
-            applyTransitionUp(progress);
         }
         
         // Update debug
-        debugImageState.textContent = `${currentImage} → ${targetImage} (${Math.round(progress * 100)}%)`;
+        debugSection.textContent = currentSectionName;
+        debugScroll.textContent = `${Math.round(scrollY)}px`;
         
-        if (progress < 1) {
-            requestAnimationFrame(animateTransition);
-        } else {
-            // Animation complete
-            currentImage = targetImage;
-            isAnimating = false;
-            nextScrollTriggersTransition = true; // Ready for next scroll
-            
-            // Hide if no image
-            if (currentImage === -1) {
-                imageContainer.classList.remove('visible');
-            }
-            
-            console.log(`Transition complete: ${currentImage}`);
+        // Update nav title based on current image when in image section
+        if (currentSectionName === 'Image Reveal' && isScrollLocked) {
+            const labels = ['Experiences', 'Details', 'Tech Stack'];
+            navTitle.textContent = labels[currentImageIndex];
+        } else if (currentSectionName !== 'Image Reveal') {
+            // Use section name for other sections
+            navTitle.textContent = currentSectionName;
         }
     }
     
-    // Apply transition for scrolling DOWN
-    function applyTransitionDown(progress) {
-        if (currentImage === -1 && targetImage === 0) {
-            // Enter: Image 1 appears from bottom
-            const clipBottom = 100 - (progress * 100);
-            images[0].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
-            imageLabel.textContent = 'Experiences';
-            debugImage1.textContent = `${clipBottom.toFixed(1)}% from bottom`;
-        }
-        else if (currentImage === 0 && targetImage === 1) {
-            // Image 1 → Image 2
-            const image1Clip = progress * 100;
-            const image2Clip = 100 - (progress * 100);
-            images[0].style.clipPath = `inset(0% 0% ${image1Clip}% 0%)`;
-            images[1].style.clipPath = `inset(${image2Clip}% 0% 0% 0%)`;
-            imageLabel.textContent = 'Details';
-            debugImage1.textContent = `${image1Clip.toFixed(1)}% from bottom`;
-            debugImage2.textContent = `${image2Clip.toFixed(1)}% from top`;
-        }
-        else if (currentImage === 1 && targetImage === 2) {
-            // Image 2 → Image 3
-            const image2Clip = progress * 100;
-            const image3Clip = 100 - (progress * 100);
-            images[1].style.clipPath = `inset(0% 0% ${image2Clip}% 0%)`;
-            images[2].style.clipPath = `inset(${image3Clip}% 0% 0% 0%)`;
-            imageLabel.textContent = 'Tech Stack';
-            debugImage2.textContent = `${image2Clip.toFixed(1)}% from bottom`;
-            debugImage3.textContent = `${image3Clip.toFixed(1)}% from top`;
-        }
-        else if (currentImage === 2 && targetImage === -1) {
-            // Exit: Image 3 disappears from bottom
-            const clipBottom = progress * 100;
-            images[2].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
-            debugImage3.textContent = `${clipBottom.toFixed(1)}% from bottom`;
-        }
-    }
-    
-    // Apply transition for scrolling UP (reverse)
-    function applyTransitionUp(progress) {
-        if (currentImage === 0 && targetImage === -1) {
-            // Reverse enter: Image 1 disappears to bottom
-            const clipBottom = progress * 100;
-            images[0].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
-            debugImage1.textContent = `${clipBottom.toFixed(1)}% from bottom`;
-        }
-        else if (currentImage === 1 && targetImage === 0) {
-            // Reverse Image 2 → Image 1
-            const image1Clip = 100 - (progress * 100);
-            const image2Clip = progress * 100;
-            images[0].style.clipPath = `inset(0% 0% ${image1Clip}% 0%)`;
-            images[1].style.clipPath = `inset(${image2Clip}% 0% 0% 0%)`;
-            imageLabel.textContent = 'Experiences';
-            debugImage1.textContent = `${image1Clip.toFixed(1)}% from bottom`;
-            debugImage2.textContent = `${image2Clip.toFixed(1)}% from top`;
-        }
-        else if (currentImage === 2 && targetImage === 1) {
-            // Reverse Image 3 → Image 2
-            const image2Clip = 100 - (progress * 100);
-            const image3Clip = progress * 100;
-            images[1].style.clipPath = `inset(0% 0% ${image2Clip}% 0%)`;
-            images[2].style.clipPath = `inset(${image3Clip}% 0% 0% 0%)`;
-            imageLabel.textContent = 'Details';
-            debugImage2.textContent = `${image2Clip.toFixed(1)}% from bottom`;
-            debugImage3.textContent = `${image3Clip.toFixed(1)}% from top`;
-        }
-        else if (currentImage === -1 && targetImage === 2) {
-            // Reverse exit: Image 3 appears from bottom
-            const clipBottom = 100 - (progress * 100);
-            images[2].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
-            imageLabel.textContent = 'Tech Stack';
-            debugImage3.textContent = `${clipBottom.toFixed(1)}% from bottom`;
-        }
-    }
-    
-    // Easing function
-    function easeInOutCubic(t) {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-    
-    // Handle scroll for immediate transitions
+    // Main scroll handler with velocity detection
     function handleScroll() {
-        const scrollY = window.scrollY;
-        const viewportHeight = window.innerHeight;
+        const currentScroll = window.scrollY || window.pageYOffset;
         
-        // Determine scroll direction and delta
-        scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
-        const scrollDelta = Math.abs(scrollY - lastScrollY);
-        lastScrollY = scrollY;
-        
-        // Accumulate scroll for threshold
-        scrollAccumulator += scrollDelta;
+        // Calculate scroll velocity
+        const velocity = calculateScrollVelocity(currentScroll);
         
         // Update debug
-        debugScroll.textContent = `${Math.round(scrollY)}px (${scrollDirection}, acc: ${Math.round(scrollAccumulator)})`;
+        updateScrollInfo();
         
-        // Update header
-        updateHeader();
+        // Check section conditions
+        const sectionInView = isSectionInViewport();
+        const atSection = isAtSection();
+        const enteringFromTop = isEnteringSectionFromTop();
+        const sectionPassed = isScrolledPastSection();
+        const aboveSection = isAboveSection();
         
-        // Get current section
-        const newSection = getCurrentSection();
-        
-        // Reset accumulator and trigger transition when threshold reached
-        if (scrollAccumulator >= scrollThreshold && nextScrollTriggersTransition && !isAnimating) {
-            scrollAccumulator = 0;
+        // Determine if we should lock/unlock
+        if ((sectionInView || atSection || enteringFromTop) && !isScrollLocked) {
+            // Section is in view - lock scroll immediately
+            lockScroll();
             
-            // Determine next image based on current state and scroll direction
-            let nextImage = currentImage;
-            
-            if (scrollDirection === 'down') {
-                // Scrolling down - progress through images
-                if (currentImage === -1 && (newSection === 'section-buffer' || newSection === 'section-image1')) {
-                    nextImage = 0; // Enter image 1
-                } else if (currentImage === 0 && newSection === 'section-image2') {
-                    nextImage = 1; // Image 1 → 2
-                } else if (currentImage === 1 && newSection === 'section-image3') {
-                    nextImage = 2; // Image 2 → 3
-                } else if (currentImage === 2 && newSection === 'section-work') {
-                    nextImage = -1; // Exit
-                }
-            } else {
-                // Scrolling up - reverse through images
-                if (currentImage === 2 && newSection === 'section-image2') {
-                    nextImage = 1; // Image 3 → 2
-                } else if (currentImage === 1 && newSection === 'section-image1') {
-                    nextImage = 0; // Image 2 → 1
-                } else if (currentImage === 0 && newSection === 'section-buffer') {
-                    nextImage = -1; // Exit (reverse enter)
-                } else if (currentImage === -1 && newSection === 'section-image3') {
-                    nextImage = 2; // Re-enter image 3 (from work)
-                }
+            // If scrolling fast, snap to section
+            if (velocity > 2) { // High velocity threshold
+                setTimeout(snapToSection, 50);
             }
-            
-            // Start transition if image changed
-            if (nextImage !== currentImage && !isAnimating) {
-                transitionTo(nextImage);
-                nextScrollTriggersTransition = false; // Wait for current animation to finish
-            }
-        }
-        
-        // If we changed sections, reset accumulator to allow immediate transition
-        if (newSection !== currentSection) {
-            currentSection = newSection;
-            scrollAccumulator = scrollThreshold; // Force transition on next scroll
+        } else if ((!sectionInView && isScrollLocked && (sectionPassed || aboveSection))) {
+            // Section left view, passed, or above - unlock scroll
+            unlockScroll();
+        } else if (isScrollLocked && !sectionInView && !atSection && !enteringFromTop) {
+            // If locked but section is not in view at all, unlock
+            unlockScroll();
         }
     }
     
-    // Initialize
+    // More responsive scroll handler (less debounce for fast scrolling)
+    function handleScrollResponsive() {
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+        
+        // Process immediately for fast scrolling detection
+        handleScroll();
+        
+        // Still debounce for performance, but with shorter delay
+        scrollTimeout = setTimeout(() => {
+            handleScroll();
+        }, 50);
+    }
+    
+    // Initialize everything
     function init() {
-        // Initialize sections
-        initSections();
+        console.log('Initializing scroll lock system...');
         
-        // Set initial state
-        images.forEach(img => {
-            img.style.clipPath = 'inset(100% 0% 0% 0%)';
-        });
+        // Initialize images
+        initImages();
         
-        currentImage = -1;
-        targetImage = -1;
-        currentSection = getCurrentSection();
-        nextScrollTriggersTransition = true;
+        // Add event listeners
+        window.addEventListener('scroll', handleScrollResponsive);
+        window.addEventListener('wheel', handleWheel, { passive: false });
         
-        // Initial update
-        updateHeader();
+        // Touch events for mobile
+        window.addEventListener('touchstart', handleTouchStart, { passive: true });
+        window.addEventListener('touchend', handleTouchEnd, { passive: true });
         
-        // Event listeners
-        window.addEventListener('scroll', handleScroll);
-        window.addEventListener('resize', () => {
-            initSections();
-        });
+        // Initial check
+        setTimeout(() => {
+            handleScroll();
+            updateScrollInfo();
+            
+            // If already in section on load, lock it
+            if (isSectionInViewport() || isAtSection()) {
+                lockScroll();
+            }
+        }, 500);
+        
+        console.log('Initialization complete');
     }
     
-    // Initialize on load
-    window.addEventListener('load', () => {
-        setTimeout(init, 100);
-    });
+    // Start when page loads
+    window.addEventListener('load', init);
 });
+// document.addEventListener('DOMContentLoaded', function() {
+//     console.log('Script loaded - initializing scroll lock...');
+    
+//     // DOM Elements
+//     const imageRevealSection = document.getElementById('image-reveal');
+//     const images = [
+//         document.getElementById('image1'),
+//         document.getElementById('image2'),
+//         document.getElementById('image3')
+//     ];
+//     const imageLabel = document.getElementById('image-label');
+//     const navTitle = document.getElementById('nav-title');
+    
+//     // Debug elements
+//     const debugSection = document.getElementById('debug-section');
+//     const debugScroll = document.getElementById('debug-scroll');
+//     const debugImageState = document.getElementById('debug-image-state');
+//     const debugImage1 = document.getElementById('debug-image1');
+//     const debugImage2 = document.getElementById('debug-image2');
+//     const debugImage3 = document.getElementById('debug-image3');
+//     const debugToggle = document.getElementById('debug-toggle');
+//     const debugOverlay = document.querySelector('.debug-overlay');
+    
+//     // State
+//     let currentImageIndex = 0;
+//     let isTransitioning = false;
+//     let isScrollLocked = false;
+//     let scrollTimeout = null;
+//     let lastScrollPosition = window.scrollY;
+//     const TRANSITION_DURATION = 800;
+    
+//     // Create scroll lock indicator
+//     const lockIndicator = document.createElement('div');
+//     lockIndicator.className = 'scroll-lock-indicator';
+//     lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+//     document.body.appendChild(lockIndicator);
+    
+//     // Toggle debug overlay
+//     let debugVisible = true;
+//     debugToggle.addEventListener('click', function() {
+//         debugVisible = !debugVisible;
+//         debugOverlay.classList.toggle('hidden');
+//         debugToggle.innerHTML = debugVisible ? 
+//             '<i class="fas fa-code"></i> Hide Debug' : 
+//             '<i class="fas fa-code"></i> Show Debug';
+//     });
+    
+//     // Initialize images with proper clipping states
+//     function initImages() {
+//         console.log('Initializing images...');
+//         images.forEach((img, index) => {
+//             // Remove any existing transitions initially
+//             img.style.transition = 'none';
+            
+//             if (index === 0) {
+//                 // First image fully visible
+//                 img.style.clipPath = 'inset(0% 0% 0% 0%)';
+//                 img.style.opacity = '1';
+//                 img.style.zIndex = '10';
+//             } else {
+//                 // Other images hidden at bottom
+//                 img.style.clipPath = 'inset(100% 0% 0% 0%)';
+//                 img.style.opacity = '1';
+//                 img.style.zIndex = (9 - index).toString();
+//             }
+//         });
+        
+//         // Set transition for animation
+//         setTimeout(() => {
+//             images.forEach(img => {
+//                 img.style.transition = 'clip-path 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+//             });
+//         }, 100);
+//     }
+    
+//     // Check if section is in viewport
+//     function isSectionInViewport() {
+//         if (!imageRevealSection) return false;
+        
+//         const rect = imageRevealSection.getBoundingClientRect();
+//         const viewportHeight = window.innerHeight;
+        
+//         // Check if section is fully in viewport
+//         const sectionTop = rect.top;
+//         const sectionBottom = rect.bottom;
+        
+//         // Section is considered "in view" when:
+//         // 1. Top is at or near viewport top
+//         // 2. Bottom is at or near viewport bottom
+//         return sectionTop >= 0 && sectionTop <= 100 && 
+//                sectionBottom >= viewportHeight - 100 && 
+//                sectionBottom <= viewportHeight + 100;
+//     }
+    
+//     // Check if we're at the top of the section (entering from above)
+//     function isAtTopOfSection() {
+//         if (!imageRevealSection) return false;
+        
+//         const rect = imageRevealSection.getBoundingClientRect();
+//         // If top of section is near top of viewport (entering section)
+//         return rect.top >= -50 && rect.top <= 150;
+//     }
+    
+//     // Check if we've scrolled past the section
+//     function isScrolledPastSection() {
+//         if (!imageRevealSection) return false;
+        
+//         const rect = imageRevealSection.getBoundingClientRect();
+//         // If section bottom is above viewport (scrolled past)
+//         return rect.bottom < -50;
+//     }
+    
+//     // Check if we're above the section (scrolling back up)
+//     function isAboveSection() {
+//         if (!imageRevealSection) return false;
+        
+//         const rect = imageRevealSection.getBoundingClientRect();
+//         // If section top is below viewport bottom (we're above it)
+//         return rect.top > window.innerHeight;
+//     }
+    
+//     // Animate transition: current clips up, next reveals up
+//     function animateTransitionToNext() {
+//         if (isTransitioning || currentImageIndex >= images.length - 1) {
+//             // If on last image, unlock scroll and go to next section
+//             if (currentImageIndex >= images.length - 1 && !isTransitioning) {
+//                 unlockScroll();
+//                 // Scroll to next section
+//                 const nextSection = document.getElementById('section-work');
+//                 if (nextSection) {
+//                     setTimeout(() => {
+//                         nextSection.scrollIntoView({ behavior: 'smooth' });
+//                     }, 100);
+//                 }
+//             }
+//             return;
+//         }
+        
+//         console.log(`Animating: Image ${currentImageIndex + 1} → Image ${currentImageIndex + 2}`);
+//         isTransitioning = true;
+        
+//         const currentImg = images[currentImageIndex];
+//         const nextImg = images[currentImageIndex + 1];
+//         const oldIndex = currentImageIndex;
+//         const newIndex = currentImageIndex + 1;
+        
+//         // Set z-index for proper stacking
+//         currentImg.style.zIndex = '10';
+//         nextImg.style.zIndex = '11'; // Next image on top during transition
+        
+//         // Ensure next image starts from bottom
+//         nextImg.style.clipPath = 'inset(100% 0% 0% 0%)';
+        
+//         // Small delay to ensure styles are applied
+//         setTimeout(() => {
+//             // Animate: current clips out from bottom, next reveals from bottom
+//             currentImg.style.clipPath = 'inset(0% 0% 100% 0%)'; // Clip up out of view
+//             nextImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
+            
+//             // Update label
+//             const labels = ['Experiences', 'Details', 'Tech Stack'];
+//             imageLabel.textContent = labels[newIndex];
+//             navTitle.textContent = labels[newIndex];
+            
+//             // Update debug
+//             debugImageState.textContent = `Transition: ${oldIndex + 1} → ${newIndex + 1}`;
+//             debugImage1.textContent = oldIndex === 0 ? 'Clipping up' : (newIndex === 0 ? 'Revealing' : 'Hidden');
+//             debugImage2.textContent = oldIndex === 1 ? 'Clipping up' : (newIndex === 1 ? 'Revealing' : 'Hidden');
+//             debugImage3.textContent = oldIndex === 2 ? 'Clipping up' : (newIndex === 2 ? 'Revealing' : 'Hidden');
+//         }, 10);
+        
+//         // Complete transition
+//         setTimeout(() => {
+//             currentImageIndex = newIndex;
+            
+//             // Reset z-index
+//             images.forEach((img, i) => {
+//                 img.style.zIndex = i === currentImageIndex ? '10' : (9 - i).toString();
+//             });
+            
+//             isTransitioning = false;
+//             console.log(`Animation complete. Current image: ${currentImageIndex + 1}`);
+            
+//             // If now on last image, show unlock hint
+//             if (currentImageIndex === images.length - 1) {
+//                 lockIndicator.innerHTML = '<i class="fas fa-arrow-down"></i> Scroll to continue';
+//             } else {
+//                 lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+//             }
+//         }, TRANSITION_DURATION);
+//     }
+    
+//     // Animate transition: current clips down, previous reveals down
+//     function animateTransitionToPrevious() {
+//         if (isTransitioning || currentImageIndex <= 0) {
+//             // If on first image, unlock scroll and go to previous section
+//             if (currentImageIndex <= 0 && !isTransitioning) {
+//                 unlockScroll();
+//                 // Scroll to previous section (buffer section)
+//                 const prevSection = document.getElementById('section-buffer');
+//                 if (prevSection) {
+//                     setTimeout(() => {
+//                         prevSection.scrollIntoView({ behavior: 'smooth' });
+//                     }, 100);
+//                 }
+//             }
+//             return;
+//         }
+        
+//         console.log(`Animating: Image ${currentImageIndex + 1} → Image ${currentImageIndex}`);
+//         isTransitioning = true;
+        
+//         const currentImg = images[currentImageIndex];
+//         const prevImg = images[currentImageIndex - 1];
+//         const oldIndex = currentImageIndex;
+//         const newIndex = currentImageIndex - 1;
+        
+//         // Set z-index for proper stacking
+//         currentImg.style.zIndex = '10';
+//         prevImg.style.zIndex = '11'; // Previous image on top during transition
+        
+//         // Ensure previous image starts from top (hidden)
+//         prevImg.style.clipPath = 'inset(100% 0% 0% 0%)';
+        
+//         // Small delay to ensure styles are applied
+//         setTimeout(() => {
+//             // Animate: current clips down out of view, previous reveals down
+//             currentImg.style.clipPath = 'inset(100% 0% 0% 0%)'; // Clip down out of view
+//             prevImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
+            
+//             // Update label
+//             const labels = ['Experiences', 'Details', 'Tech Stack'];
+//             imageLabel.textContent = labels[newIndex];
+//             navTitle.textContent = labels[newIndex];
+            
+//             // Update debug
+//             debugImageState.textContent = `Transition: ${oldIndex + 1} → ${newIndex + 1}`;
+//             debugImage1.textContent = oldIndex === 0 ? 'Clipping down' : (newIndex === 0 ? 'Revealing' : 'Hidden');
+//             debugImage2.textContent = oldIndex === 1 ? 'Clipping down' : (newIndex === 1 ? 'Revealing' : 'Hidden');
+//             debugImage3.textContent = oldIndex === 2 ? 'Clipping down' : (newIndex === 2 ? 'Revealing' : 'Hidden');
+//         }, 10);
+        
+//         // Complete transition
+//         setTimeout(() => {
+//             currentImageIndex = newIndex;
+            
+//             // Reset z-index
+//             images.forEach((img, i) => {
+//                 img.style.zIndex = i === currentImageIndex ? '10' : (9 - i).toString();
+//             });
+            
+//             isTransitioning = false;
+//             console.log(`Animation complete. Current image: ${currentImageIndex + 1}`);
+            
+//             // If now on first image, show unlock hint for scrolling up
+//             if (currentImageIndex === 0) {
+//                 lockIndicator.innerHTML = '<i class="fas fa-arrow-up"></i> Scroll to go back';
+//             } else {
+//                 lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+//             }
+//         }, TRANSITION_DURATION);
+//     }
+    
+//     // Show image immediately (no animation)
+//     function showImageImmediately(index) {
+//         if (index < 0 || index >= images.length) return;
+        
+//         console.log(`Showing image ${index + 1} immediately`);
+//         currentImageIndex = index;
+        
+//         images.forEach((img, i) => {
+//             img.style.transition = 'none';
+//             if (i === index) {
+//                 img.style.clipPath = 'inset(0% 0% 0% 0%)';
+//                 img.style.zIndex = '10';
+//             } else {
+//                 img.style.clipPath = 'inset(100% 0% 0% 0%)';
+//                 img.style.zIndex = (9 - i).toString();
+//             }
+//         });
+        
+//         // Update label
+//         const labels = ['Experiences', 'Details', 'Tech Stack'];
+//         imageLabel.textContent = labels[index];
+//         navTitle.textContent = labels[index];
+        
+//         // Restore transitions after a moment
+//         setTimeout(() => {
+//             images.forEach(img => {
+//                 img.style.transition = 'clip-path 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+//             });
+//         }, 50);
+        
+//         // Update debug
+//         debugImageState.textContent = `Image ${index + 1} visible`;
+//         debugImage1.textContent = index === 0 ? 'Visible' : 'Hidden';
+//         debugImage2.textContent = index === 1 ? 'Visible' : 'Hidden';
+//         debugImage3.textContent = index === 2 ? 'Visible' : 'Hidden';
+//     }
+    
+//     // Lock scroll to section
+//     function lockScroll() {
+//         if (isScrollLocked) return;
+        
+//         console.log('🔒 Locking scroll to image section');
+//         isScrollLocked = true;
+//         lockIndicator.classList.add('visible');
+        
+//         // Show first image if not already showing
+//         if (currentImageIndex !== 0) {
+//             showImageImmediately(0);
+//         }
+        
+//         // Update lock indicator based on current image
+//         if (currentImageIndex === 0) {
+//             lockIndicator.innerHTML = '<i class="fas fa-arrow-up"></i> Scroll to go back';
+//         } else if (currentImageIndex === images.length - 1) {
+//             lockIndicator.innerHTML = '<i class="fas fa-arrow-down"></i> Scroll to continue';
+//         } else {
+//             lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
+//         }
+        
+//         // Add scroll lock to body
+//         document.body.style.overflow = 'hidden';
+//         document.body.style.height = '100vh';
+//         document.body.style.width = '100%';
+        
+//         debugImageState.textContent = 'Scroll locked - Image 1 visible';
+//     }
+    
+//     // Unlock scroll
+//     function unlockScroll() {
+//         if (!isScrollLocked) return;
+        
+//         console.log('🔓 Unlocking scroll');
+//         isScrollLocked = false;
+//         lockIndicator.classList.remove('visible');
+        
+//         // Restore scroll
+//         document.body.style.overflow = '';
+//         document.body.style.height = '';
+//         document.body.style.width = '';
+        
+//         debugImageState.textContent = 'Scroll unlocked';
+//     }
+    
+//     // Handle wheel events for image transitions
+//     function handleWheel(e) {
+//         if (!isScrollLocked || isTransitioning) return;
+        
+//         e.preventDefault();
+//         e.stopPropagation();
+        
+//         if (e.deltaY > 0) {
+//             // Scrolling down - next image
+//             animateTransitionToNext();
+//         } else if (e.deltaY < 0) {
+//             // Scrolling up - previous image
+//             animateTransitionToPrevious();
+//         }
+//     }
+    
+//     // Handle touch events for mobile
+//     let touchStartY = 0;
+//     let touchStartTime = 0;
+    
+//     function handleTouchStart(e) {
+//         if (!isScrollLocked || isTransitioning) return;
+//         touchStartY = e.touches[0].clientY;
+//         touchStartTime = Date.now();
+//     }
+    
+//     function handleTouchEnd(e) {
+//         if (!isScrollLocked || isTransitioning) return;
+        
+//         const touchEndY = e.changedTouches[0].clientY;
+//         const deltaY = touchStartY - touchEndY;
+//         const deltaTime = Date.now() - touchStartTime;
+        
+//         // Only trigger on significant swipe (min 50px) and quick enough (max 500ms)
+//         if (Math.abs(deltaY) > 50 && deltaTime < 500) {
+//             if (deltaY > 0) {
+//                 // Swipe down - next image
+//                 animateTransitionToNext();
+//             } else {
+//                 // Swipe up - previous image
+//                 animateTransitionToPrevious();
+//             }
+//         }
+//     }
+    
+//     // Update header and debug info
+//     function updateScrollInfo() {
+//         const scrollY = window.scrollY || window.pageYOffset;
+//         const sections = [
+//             { id: 'section-hero', name: 'Welcome' },
+//             { id: 'section-about', name: 'About Me' },
+//             { id: 'section-buffer', name: 'Continue' },
+//             { id: 'image-reveal', name: 'Image Reveal' },
+//             { id: 'section-work', name: 'Work Experience' },
+//             { id: 'section-education', name: 'Education' },
+//             { id: 'section-projects', name: 'Projects' },
+//             { id: 'section-military', name: 'Military' },
+//             { id: 'section-hobbies', name: 'Hobbies' },
+//             { id: 'section-contact', name: 'Contact' }
+//         ];
+        
+//         // Find current section
+//         let currentSectionName = 'Unknown';
+//         for (const section of sections) {
+//             const el = document.getElementById(section.id);
+//             if (el) {
+//                 const elTop = el.offsetTop;
+//                 const elBottom = elTop + el.offsetHeight;
+                
+//                 if (scrollY >= elTop - 100 && scrollY < elBottom - 100) {
+//                     currentSectionName = section.name;
+//                     break;
+//                 }
+//             }
+//         }
+        
+//         // Update debug
+//         debugSection.textContent = currentSectionName;
+//         debugScroll.textContent = `${Math.round(scrollY)}px`;
+        
+//         // Update nav title based on current image when in image section
+//         if (currentSectionName === 'Image Reveal' && isScrollLocked) {
+//             const labels = ['Experiences', 'Details', 'Tech Stack'];
+//             navTitle.textContent = labels[currentImageIndex];
+//         } else if (currentSectionName !== 'Image Reveal') {
+//             // Use section name for other sections
+//             navTitle.textContent = currentSectionName;
+//         }
+//     }
+    
+//     // Main scroll handler
+//     function handleScroll() {
+//         const currentScroll = window.scrollY || window.pageYOffset;
+        
+//         // Update debug
+//         updateScrollInfo();
+        
+//         // Check section visibility
+//         const sectionInView = isSectionInViewport();
+//         const sectionPassed = isScrolledPastSection();
+//         const aboveSection = isAboveSection();
+//         const atTopOfSection = isAtTopOfSection();
+        
+//         // Determine if we should lock/unlock
+//         if ((sectionInView || atTopOfSection) && !isScrollLocked) {
+//             // Section entered view or at top - lock scroll
+//             lockScroll();
+//         } else if ((!sectionInView && isScrollLocked && (sectionPassed || aboveSection)) || 
+//                    (!sectionInView && !atTopOfSection && isScrollLocked)) {
+//             // Section left view, passed, or above - unlock scroll
+//             unlockScroll();
+//         }
+        
+//         lastScrollPosition = currentScroll;
+//     }
+    
+//     // Debounced scroll handler
+//     function debounceScroll() {
+//         if (scrollTimeout) clearTimeout(scrollTimeout);
+//         scrollTimeout = setTimeout(handleScroll, 100);
+//     }
+    
+//     // Initialize everything
+//     function init() {
+//         console.log('Initializing scroll lock system...');
+        
+//         // Initialize images
+//         initImages();
+        
+//         // Add event listeners
+//         window.addEventListener('scroll', debounceScroll);
+//         window.addEventListener('wheel', handleWheel, { passive: false });
+        
+//         // Touch events for mobile
+//         window.addEventListener('touchstart', handleTouchStart, { passive: true });
+//         window.addEventListener('touchend', handleTouchEnd, { passive: true });
+        
+//         // Initial check
+//         setTimeout(() => {
+//             handleScroll();
+//             updateScrollInfo();
+            
+//             // If already in section on load, lock it
+//             if (isSectionInViewport() || isAtTopOfSection()) {
+//                 lockScroll();
+//             }
+//         }, 500);
+        
+//         console.log('Initialization complete');
+//     }
+    
+//     // Start when page loads
+//     window.addEventListener('load', init);
+// });
 // document.addEventListener('DOMContentLoaded', function() {
 //     // DOM Elements
 //     const imageContainer = document.getElementById('image-container');
