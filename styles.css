@@ -257,7 +257,7 @@ nav {
 /* Desktop image sizing */
 @media (min-width: 769px) {
     .clipping-image {
-        height: 80vh;
+        height: 90vh;
         width: auto;
     }
 }
@@ -265,7 +265,7 @@ nav {
 /* Mobile image sizing */
 @media (max-width: 768px) {
     .clipping-image {
-        width: 90vw;
+        width: 95vw;
         height: auto;
     }
     
