@@ -20,10 +20,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const debugOverlay = document.querySelector('.debug-overlay');
     
     // State
-    let isScrolling = false;
-    let scrollTimeout;
-    let currentSnapPosition = 0;
-    let isUserScrolling = true; // Track if user is actively scrolling
+    let currentImage = 0; // 0 = image1, 1 = image2, 2 = image3, -1 = hidden
+    let targetImage = -1;
+    let isAnimating = false;
+    let animationStart = 0;
+    const ANIMATION_DURATION = 800;
+    
+    // Scroll tracking
+    let lastScrollY = window.scrollY;
+    let scrollDirection = 'down';
+    let scrollThreshold = 50; // pixels to trigger transition
+    let scrollAccumulator = 0;
+    
+    // Section tracking
+    let sections = {};
+    let currentSection = null;
+    let nextScrollTriggersTransition = false;
     
     // Toggle debug overlay
     let debugVisible = true;
@@ -38,474 +50,294 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Create transition markers at specific positions
-    function createTransitionMarkers() {
-        // Get all sections
-        const sections = [
-            'section-hero',
-            'section-about',
-            'section-buffer',
-            'section-image1',
-            'section-image2',
-            'section-image3',
-            'section-work',
-            'section-education',
-            'section-projects',
-            'section-military',
-            'section-hobbies',
-            'section-contact'
+    // Initialize sections
+    function initSections() {
+        const sectionIds = [
+            'section-hero', 'section-about', 'section-buffer',
+            'section-image1', 'section-image2', 'section-image3',
+            'section-work', 'section-education', 'section-projects',
+            'section-military', 'section-hobbies', 'section-contact'
         ];
         
-        // Get section positions
-        const sectionPositions = sections.map(sectionId => {
-            const element = document.getElementById(sectionId);
-            if (!element) return null;
-            
-            return {
-                id: sectionId,
-                top: element.offsetTop,
-                bottom: element.offsetTop + element.offsetHeight,
-                height: element.offsetHeight
-            };
-        }).filter(Boolean);
-        
-        // Create markers at key transition points - FOCUS ON IMAGE FULL STATES
-        const markers = [
-            // Buffer to Image 1
-            { id: 'buffer-mid', section: 'section-buffer', offset: 0.5, label: 'Image 1 Start Reveal' },
-            { id: 'image1-start', section: 'section-image1', offset: 0, label: 'Image 1 Section Start' },
-            
-            // KEY: Image 1 FULLY VISIBLE point (0% clip from top)
-            { id: 'image1-full', section: 'section-image1', offset: 0.3, label: 'Image 1 Full (0% clip)' },
-            
-            // Image 1 to Image 2 transition
-            { id: 'image1-to-2', section: 'section-image1', offset: 0.8, label: 'Image 1→2 Transition' },
-            { id: 'image2-start', section: 'section-image2', offset: 0, label: 'Image 2 Section Start' },
-            
-            // KEY: Image 2 FULLY VISIBLE point (0% clip from top)
-            { id: 'image2-full', section: 'section-image2', offset: 0.3, label: 'Image 2 Full (0% clip)' },
-            
-            // Image 2 to Image 3 transition
-            { id: 'image2-to-3', section: 'section-image2', offset: 0.8, label: 'Image 2→3 Transition' },
-            { id: 'image3-start', section: 'section-image3', offset: 0, label: 'Image 3 Section Start' },
-            
-            // KEY: Image 3 FULLY VISIBLE point (0% clip from top)
-            { id: 'image3-full', section: 'section-image3', offset: 0.3, label: 'Image 3 Full (0% clip)' },
-            
-            // Image 3 exit
-            { id: 'image3-exit', section: 'section-image3', offset: 0.8, label: 'Image 3 Exit Start' },
-            { id: 'work-start', section: 'section-work', offset: 0, label: 'Work Section Start' }
-        ];
-        
-        // Calculate marker positions
-        return markers.map(marker => {
-            const section = sectionPositions.find(s => s.id === marker.section);
-            if (!section) return null;
-            
-            return {
-                id: marker.id,
-                label: marker.label,
-                position: section.top + (section.height * marker.offset),
-                section: marker.section,
-                offset: marker.offset
-            };
-        }).filter(Boolean);
+        sectionIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                sections[id] = {
+                    element: el,
+                    top: el.offsetTop,
+                    bottom: el.offsetTop + el.offsetHeight,
+                    height: el.offsetHeight
+                };
+            }
+        });
     }
     
-    // Get transition progress using markers
-    function getTransitionProgress(scrollPosition, viewportHeight) {
-        const markers = createTransitionMarkers();
-        const viewportCenter = scrollPosition + (viewportHeight / 2);
+    // Get current section
+    function getCurrentSection() {
+        const scrollY = window.scrollY;
+        const viewportHeight = window.innerHeight;
+        const viewportCenter = scrollY + (viewportHeight / 2);
         
-        // Sort markers by position
-        markers.sort((a, b) => a.position - b.position);
-        
-        // Find which markers we're between
-        for (let i = 0; i < markers.length - 1; i++) {
-            const currentMarker = markers[i];
-            const nextMarker = markers[i + 1];
-            
-            if (viewportCenter >= currentMarker.position && viewportCenter <= nextMarker.position) {
-                const progress = (viewportCenter - currentMarker.position) / 
-                               (nextMarker.position - currentMarker.position);
-                
-                return {
-                    fromMarker: currentMarker,
-                    toMarker: nextMarker,
-                    progress: Math.max(0, Math.min(1, progress))
-                };
+        for (const [id, section] of Object.entries(sections)) {
+            if (viewportCenter >= section.top && viewportCenter <= section.bottom) {
+                return id;
             }
         }
-        
-        // If at the end, return last marker
-        if (markers.length > 0) {
-            const lastMarker = markers[markers.length - 1];
-            if (viewportCenter >= lastMarker.position) {
-                return {
-                    fromMarker: lastMarker,
-                    toMarker: lastMarker,
-                    progress: 1
-                };
-            }
-        }
-        
         return null;
     }
     
-    // Get snap points for proximity snap - FOCUS ON FULL IMAGE POSITIONS
-    function getSnapPoints() {
-        const markers = createTransitionMarkers();
+    // Update header
+    function updateHeader() {
+        const section = getCurrentSection();
+        if (!section) return;
         
-        // We only want to snap to KEY positions where images are fully visible
-        const keySnapMarkers = markers.filter(marker => 
-            marker.id.includes('full') || // Full image positions
-            marker.id.includes('start') || // Section starts
-            marker.id.includes('mid') // Mid points
-        );
+        const sectionName = section.replace('section-', '').replace(/-/g, ' ');
+        const displayName = sectionName.replace(/\b\w/g, l => l.toUpperCase());
         
-        return keySnapMarkers.map(marker => ({
-            id: marker.id,
-            position: marker.position,
-            label: marker.label
-        }));
+        // Special cases for image sections
+        if (section === 'section-image1') {
+            navTitle.textContent = 'Experiences';
+        } else if (section === 'section-image2') {
+            navTitle.textContent = 'Details';
+        } else if (section === 'section-image3') {
+            navTitle.textContent = 'Tech Stack';
+        } else {
+            navTitle.textContent = displayName;
+        }
+        
+        debugSection.textContent = displayName;
     }
     
-    // Apply proximity snap - ONLY when user stops scrolling
-    function applyProximitySnap(scrollPosition, viewportHeight) {
-        if (isScrolling || !isUserScrolling) return;
+    // Start transition to new image
+    function transitionTo(newImageIndex) {
+        if (newImageIndex === currentImage || isAnimating) return;
         
-        const snapPoints = getSnapPoints();
-        const snapThreshold = viewportHeight * 0.2; // 20% of viewport for more sensitive snap
+        console.log(`Transition: ${currentImage} → ${newImageIndex}`);
         
-        // Find the closest snap point
-        let closestSnap = null;
-        let minDistance = Infinity;
+        targetImage = newImageIndex;
+        isAnimating = true;
+        animationStart = Date.now();
         
-        snapPoints.forEach(snapPoint => {
-            const distance = Math.abs(scrollPosition + (viewportHeight / 2) - snapPoint.position);
-            if (distance < minDistance && distance < snapThreshold) {
-                minDistance = distance;
-                closestSnap = snapPoint;
-            }
-        });
-        
-        // Snap to the closest point (only if it's different from current)
-        if (closestSnap && Math.abs(scrollPosition + (viewportHeight / 2) - closestSnap.position) > 10) {
-            isScrolling = true;
-            isUserScrolling = false;
-            currentSnapPosition = closestSnap.position;
-            
-            // Calculate target scroll position (center the viewport on the snap point)
-            const targetScroll = closestSnap.position - (viewportHeight / 2);
-            
-            window.scrollTo({
-                top: targetScroll,
-                behavior: 'smooth'
-            });
-            
-            console.log(`Snapping to: ${closestSnap.label} at ${closestSnap.position}px`);
-            
-            // Reset flags after animation
-            setTimeout(() => {
-                isScrolling = false;
-                isUserScrolling = true;
-            }, 600);
+        // Show container if transitioning to an image
+        if (newImageIndex >= 0) {
+            imageContainer.classList.add('visible');
         }
+        
+        // Start animation
+        requestAnimationFrame(animateTransition);
     }
     
-    // Update image transitions with emphasis on FULL VISIBLE states
-    function updateImageTransitions(transitionInfo) {
-        if (!transitionInfo) {
-            imageContainer.classList.remove('visible');
-            return;
+    // Animation loop
+    function animateTransition() {
+        const now = Date.now();
+        const elapsed = now - animationStart;
+        let progress = Math.min(elapsed / ANIMATION_DURATION, 1);
+        
+        // Apply easing
+        progress = easeInOutCubic(progress);
+        
+        // Apply transition based on direction
+        if (scrollDirection === 'down') {
+            applyTransitionDown(progress);
+        } else {
+            applyTransitionUp(progress);
         }
         
-        const { fromMarker, toMarker, progress } = transitionInfo;
+        // Update debug
+        debugImageState.textContent = `${currentImage} → ${targetImage} (${Math.round(progress * 100)}%)`;
         
-        // Update header based on transition
-        if (fromMarker.section) {
-            updateHeaderTitle(fromMarker.section);
-        }
-        debugSection.textContent = `${fromMarker.label || fromMarker.id} → ${toMarker.label || toMarker.id}`;
-        
-        // Handle specific marker transitions with emphasis on 0% clip points
-        if (fromMarker.id === 'buffer-mid' && toMarker.id === 'image1-start') {
-            // Buffer → Image 1: Start revealing Image 1
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Experiences';
+        if (progress < 1) {
+            requestAnimationFrame(animateTransition);
+        } else {
+            // Animation complete
+            currentImage = targetImage;
+            isAnimating = false;
+            nextScrollTriggersTransition = true; // Ready for next scroll
             
-            // Image 1 reveals from bottom
-            const image1ClipBottom = (1 - progress) * 100;
-            
-            images[0].style.clipPath = `inset(0% 0% ${image1ClipBottom}% 0%)`;
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = `${image1ClipBottom.toFixed(1)}% from bottom`;
-            debugImage2.textContent = '100% from top';
-            debugImage3.textContent = '100% from top';
-        }
-        else if (fromMarker.id === 'image1-start' && toMarker.id === 'image1-full') {
-            // Key transition: Image 1 becomes FULLY VISIBLE (0% clip)
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Experiences';
-            
-            // Progress from buffer-mid to image1-full should reach 0% clip
-            // At image1-full marker, clip should be 0%
-            const effectiveProgress = progress;
-            const image1ClipBottom = (1 - effectiveProgress) * 50; // Reduce to 0% by image1-full
-            
-            images[0].style.clipPath = `inset(0% 0% ${image1ClipBottom}% 0%)`;
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = `${image1ClipBottom.toFixed(1)}% from bottom (Goal: 0%)`;
-            debugImage2.textContent = '100% from top';
-            debugImage3.textContent = '100% from top';
-            
-            // At image1-full marker, ensure clip is 0%
-            if (fromMarker.id === 'image1-full' || toMarker.id === 'image1-full') {
-                images[0].style.clipPath = 'inset(0% 0% 0% 0%)';
-                debugImage1.textContent = '0% from bottom (FULLY VISIBLE)';
-            }
-        }
-        else if (fromMarker.id === 'image1-full' && toMarker.id === 'image1-to-2') {
-            // Image 1 remains fully visible, prepare for transition
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Experiences';
-            
-            // Image 1 stays fully visible
-            images[0].style.clipPath = 'inset(0% 0% 0% 0%)';
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = '0% from bottom (FULLY VISIBLE)';
-            debugImage2.textContent = '100% from top';
-            debugImage3.textContent = '100% from top';
-        }
-        else if (fromMarker.id === 'image1-to-2' && toMarker.id === 'image2-start') {
-            // Transition: Image 1 → Image 2
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Details';
-            
-            // Image 1 clips from bottom, Image 2 reveals from top
-            const image1ClipBottom = progress * 100;
-            const image2ClipTop = (1 - progress) * 100;
-            
-            images[0].style.clipPath = `inset(0% 0% ${image1ClipBottom}% 0%)`;
-            images[1].style.clipPath = `inset(${image2ClipTop}% 0% 0% 0%)`;
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = `${image1ClipBottom.toFixed(1)}% from bottom`;
-            debugImage2.textContent = `${image2ClipTop.toFixed(1)}% from top`;
-            debugImage3.textContent = '100% from top';
-        }
-        else if (fromMarker.id === 'image2-start' && toMarker.id === 'image2-full') {
-            // Key transition: Image 2 becomes FULLY VISIBLE (0% clip)
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Details';
-            
-            const effectiveProgress = progress;
-            const image2ClipTop = (1 - effectiveProgress) * 50;
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = `inset(${image2ClipTop}% 0% 0% 0%)`;
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = `${image2ClipTop.toFixed(1)}% from top (Goal: 0%)`;
-            debugImage3.textContent = '100% from top';
-            
-            // At image2-full marker, ensure clip is 0%
-            if (fromMarker.id === 'image2-full' || toMarker.id === 'image2-full') {
-                images[1].style.clipPath = 'inset(0% 0% 0% 0%)';
-                debugImage2.textContent = '0% from top (FULLY VISIBLE)';
-            }
-        }
-        else if (fromMarker.id === 'image2-full' && toMarker.id === 'image2-to-3') {
-            // Image 2 remains fully visible
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Details';
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = 'inset(0% 0% 0% 0%)';
-            images[2].style.clipPath = 'inset(100% 0% 0% 0%)';
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = '0% from top (FULLY VISIBLE)';
-            debugImage3.textContent = '100% from top';
-        }
-        else if (fromMarker.id === 'image2-to-3' && toMarker.id === 'image3-start') {
-            // Transition: Image 2 → Image 3
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Tech Stack';
-            
-            const image2ClipBottom = progress * 100;
-            const image3ClipTop = (1 - progress) * 100;
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = `inset(0% 0% ${image2ClipBottom}% 0%)`;
-            images[2].style.clipPath = `inset(${image3ClipTop}% 0% 0% 0%)`;
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = `${image2ClipBottom.toFixed(1)}% from bottom`;
-            debugImage3.textContent = `${image3ClipTop.toFixed(1)}% from top`;
-        }
-        else if (fromMarker.id === 'image3-start' && toMarker.id === 'image3-full') {
-            // Key transition: Image 3 becomes FULLY VISIBLE (0% clip)
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Tech Stack';
-            
-            const effectiveProgress = progress;
-            const image3ClipTop = (1 - effectiveProgress) * 50;
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = `inset(${image3ClipTop}% 0% 0% 0%)`;
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = '100% hidden';
-            debugImage3.textContent = `${image3ClipTop.toFixed(1)}% from top (Goal: 0%)`;
-            
-            // At image3-full marker, ensure clip is 0%
-            if (fromMarker.id === 'image3-full' || toMarker.id === 'image3-full') {
-                images[2].style.clipPath = 'inset(0% 0% 0% 0%)';
-                debugImage3.textContent = '0% from top (FULLY VISIBLE)';
-            }
-        }
-        else if (fromMarker.id === 'image3-full' && toMarker.id === 'image3-exit') {
-            // Image 3 remains fully visible
-            imageContainer.classList.add('visible');
-            imageLabel.textContent = 'Tech Stack';
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = 'inset(0% 0% 0% 0%)';
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = '100% hidden';
-            debugImage3.textContent = '0% from top (FULLY VISIBLE)';
-        }
-        else if (fromMarker.id === 'image3-exit' && toMarker.id === 'work-start') {
-            // Image 3 exits
-            imageContainer.classList.add('visible');
-            
-            const image3ClipBottom = progress * 100;
-            
-            images[0].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[1].style.clipPath = 'inset(100% 0% 0% 0%)';
-            images[2].style.clipPath = `inset(0% 0% ${image3ClipBottom}% 0%)`;
-            
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = '100% hidden';
-            debugImage3.textContent = `${image3ClipBottom.toFixed(1)}% from bottom`;
-            
-            if (progress >= 0.95) {
+            // Hide if no image
+            if (currentImage === -1) {
                 imageContainer.classList.remove('visible');
             }
-        }
-        else if (fromMarker.id.startsWith('section-')) {
-            // Default: hide images
-            imageContainer.classList.remove('visible');
-            debugImage1.textContent = '100% hidden';
-            debugImage2.textContent = '100% hidden';
-            debugImage3.textContent = '100% hidden';
+            
+            console.log(`Transition complete: ${currentImage}`);
         }
     }
     
-    // Update header title
-    function updateHeaderTitle(sectionId) {
-        const titleMap = {
-            'section-hero': 'Welcome',
-            'section-about': 'About Me',
-            'section-buffer': 'Continue',
-            'section-image1': 'Experiences',
-            'section-image2': 'Details', 
-            'section-image3': 'Tech Stack',
-            'section-work': 'Work Experience',
-            'section-education': 'Education',
-            'section-projects': 'Projects',
-            'section-military': 'Military',
-            'section-hobbies': 'Hobbies',
-            'section-contact': 'Contact'
-        };
-        
-        if (titleMap[sectionId]) {
-            navTitle.textContent = titleMap[sectionId];
+    // Apply transition for scrolling DOWN
+    function applyTransitionDown(progress) {
+        if (currentImage === -1 && targetImage === 0) {
+            // Enter: Image 1 appears from bottom
+            const clipBottom = 100 - (progress * 100);
+            images[0].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
+            imageLabel.textContent = 'Experiences';
+            debugImage1.textContent = `${clipBottom.toFixed(1)}% from bottom`;
+        }
+        else if (currentImage === 0 && targetImage === 1) {
+            // Image 1 → Image 2
+            const image1Clip = progress * 100;
+            const image2Clip = 100 - (progress * 100);
+            images[0].style.clipPath = `inset(0% 0% ${image1Clip}% 0%)`;
+            images[1].style.clipPath = `inset(${image2Clip}% 0% 0% 0%)`;
+            imageLabel.textContent = 'Details';
+            debugImage1.textContent = `${image1Clip.toFixed(1)}% from bottom`;
+            debugImage2.textContent = `${image2Clip.toFixed(1)}% from top`;
+        }
+        else if (currentImage === 1 && targetImage === 2) {
+            // Image 2 → Image 3
+            const image2Clip = progress * 100;
+            const image3Clip = 100 - (progress * 100);
+            images[1].style.clipPath = `inset(0% 0% ${image2Clip}% 0%)`;
+            images[2].style.clipPath = `inset(${image3Clip}% 0% 0% 0%)`;
+            imageLabel.textContent = 'Tech Stack';
+            debugImage2.textContent = `${image2Clip.toFixed(1)}% from bottom`;
+            debugImage3.textContent = `${image3Clip.toFixed(1)}% from top`;
+        }
+        else if (currentImage === 2 && targetImage === -1) {
+            // Exit: Image 3 disappears from bottom
+            const clipBottom = progress * 100;
+            images[2].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
+            debugImage3.textContent = `${clipBottom.toFixed(1)}% from bottom`;
         }
     }
     
-    // Track user scrolling
-    let userScrollTimeout;
-    function trackUserScrolling() {
-        isUserScrolling = true;
-        if (userScrollTimeout) clearTimeout(userScrollTimeout);
-        
-        // User is considered "done scrolling" after 150ms of no activity
-        userScrollTimeout = setTimeout(() => {
-            isUserScrolling = false;
-        }, 150);
+    // Apply transition for scrolling UP (reverse)
+    function applyTransitionUp(progress) {
+        if (currentImage === 0 && targetImage === -1) {
+            // Reverse enter: Image 1 disappears to bottom
+            const clipBottom = progress * 100;
+            images[0].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
+            debugImage1.textContent = `${clipBottom.toFixed(1)}% from bottom`;
+        }
+        else if (currentImage === 1 && targetImage === 0) {
+            // Reverse Image 2 → Image 1
+            const image1Clip = 100 - (progress * 100);
+            const image2Clip = progress * 100;
+            images[0].style.clipPath = `inset(0% 0% ${image1Clip}% 0%)`;
+            images[1].style.clipPath = `inset(${image2Clip}% 0% 0% 0%)`;
+            imageLabel.textContent = 'Experiences';
+            debugImage1.textContent = `${image1Clip.toFixed(1)}% from bottom`;
+            debugImage2.textContent = `${image2Clip.toFixed(1)}% from top`;
+        }
+        else if (currentImage === 2 && targetImage === 1) {
+            // Reverse Image 3 → Image 2
+            const image2Clip = 100 - (progress * 100);
+            const image3Clip = progress * 100;
+            images[1].style.clipPath = `inset(0% 0% ${image2Clip}% 0%)`;
+            images[2].style.clipPath = `inset(${image3Clip}% 0% 0% 0%)`;
+            imageLabel.textContent = 'Details';
+            debugImage2.textContent = `${image2Clip.toFixed(1)}% from bottom`;
+            debugImage3.textContent = `${image3Clip.toFixed(1)}% from top`;
+        }
+        else if (currentImage === -1 && targetImage === 2) {
+            // Reverse exit: Image 3 appears from bottom
+            const clipBottom = 100 - (progress * 100);
+            images[2].style.clipPath = `inset(0% 0% ${clipBottom}% 0%)`;
+            imageLabel.textContent = 'Tech Stack';
+            debugImage3.textContent = `${clipBottom.toFixed(1)}% from bottom`;
+        }
     }
     
-    // Main update function
-    function updateScrollEffect() {
-        const scrollPosition = window.scrollY;
+    // Easing function
+    function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+    
+    // Handle scroll for immediate transitions
+    function handleScroll() {
+        const scrollY = window.scrollY;
         const viewportHeight = window.innerHeight;
         
-        // Update debug info
-        debugScroll.textContent = `${Math.round(scrollPosition)}px`;
+        // Determine scroll direction and delta
+        scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
+        const scrollDelta = Math.abs(scrollY - lastScrollY);
+        lastScrollY = scrollY;
         
-        // Get transition progress
-        const transitionInfo = getTransitionProgress(scrollPosition, viewportHeight);
+        // Accumulate scroll for threshold
+        scrollAccumulator += scrollDelta;
         
-        // Update image transitions
-        updateImageTransitions(transitionInfo);
+        // Update debug
+        debugScroll.textContent = `${Math.round(scrollY)}px (${scrollDirection}, acc: ${Math.round(scrollAccumulator)})`;
         
-        // Apply proximity snap only when user stops scrolling
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout);
+        // Update header
+        updateHeader();
+        
+        // Get current section
+        const newSection = getCurrentSection();
+        
+        // Reset accumulator and trigger transition when threshold reached
+        if (scrollAccumulator >= scrollThreshold && nextScrollTriggersTransition && !isAnimating) {
+            scrollAccumulator = 0;
+            
+            // Determine next image based on current state and scroll direction
+            let nextImage = currentImage;
+            
+            if (scrollDirection === 'down') {
+                // Scrolling down - progress through images
+                if (currentImage === -1 && (newSection === 'section-buffer' || newSection === 'section-image1')) {
+                    nextImage = 0; // Enter image 1
+                } else if (currentImage === 0 && newSection === 'section-image2') {
+                    nextImage = 1; // Image 1 → 2
+                } else if (currentImage === 1 && newSection === 'section-image3') {
+                    nextImage = 2; // Image 2 → 3
+                } else if (currentImage === 2 && newSection === 'section-work') {
+                    nextImage = -1; // Exit
+                }
+            } else {
+                // Scrolling up - reverse through images
+                if (currentImage === 2 && newSection === 'section-image2') {
+                    nextImage = 1; // Image 3 → 2
+                } else if (currentImage === 1 && newSection === 'section-image1') {
+                    nextImage = 0; // Image 2 → 1
+                } else if (currentImage === 0 && newSection === 'section-buffer') {
+                    nextImage = -1; // Exit (reverse enter)
+                } else if (currentImage === -1 && newSection === 'section-image3') {
+                    nextImage = 2; // Re-enter image 3 (from work)
+                }
+            }
+            
+            // Start transition if image changed
+            if (nextImage !== currentImage && !isAnimating) {
+                transitionTo(nextImage);
+                nextScrollTriggersTransition = false; // Wait for current animation to finish
+            }
         }
         
-        scrollTimeout = setTimeout(() => {
-            if (!isScrolling && !isUserScrolling) {
-                applyProximitySnap(scrollPosition, viewportHeight);
-            }
-        }, 200);
+        // If we changed sections, reset accumulator to allow immediate transition
+        if (newSection !== currentSection) {
+            currentSection = newSection;
+            scrollAccumulator = scrollThreshold; // Force transition on next scroll
+        }
     }
     
     // Initialize
     function init() {
-        // Set initial clip paths
-        images.forEach((img, index) => {
+        // Initialize sections
+        initSections();
+        
+        // Set initial state
+        images.forEach(img => {
             img.style.clipPath = 'inset(100% 0% 0% 0%)';
         });
         
-        updateScrollEffect();
-        updateHeaderTitle('section-hero');
+        currentImage = -1;
+        targetImage = -1;
+        currentSection = getCurrentSection();
+        nextScrollTriggersTransition = true;
+        
+        // Initial update
+        updateHeader();
+        
+        // Event listeners
+        window.addEventListener('scroll', handleScroll);
+        window.addEventListener('resize', () => {
+            initSections();
+        });
     }
     
-    // Event Listeners
-    let animationFrame;
-    window.addEventListener('scroll', function() {
-        trackUserScrolling(); // Track that user is actively scrolling
-        
-        if (animationFrame) {
-            cancelAnimationFrame(animationFrame);
-        }
-        animationFrame = requestAnimationFrame(updateScrollEffect);
-    });
-    
-    window.addEventListener('resize', function() {
-        updateScrollEffect();
-    });
-    
     // Initialize on load
-    window.addEventListener('load', function() {
+    window.addEventListener('load', () => {
         setTimeout(init, 100);
     });
-    
-    // Initialize
-    init();
 });
 // document.addEventListener('DOMContentLoaded', function() {
 //     // DOM Elements

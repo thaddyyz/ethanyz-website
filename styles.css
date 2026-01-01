@@ -200,15 +200,16 @@ nav {
 
 /* Image Container - Responsive */
 /* Image Container - Responsive */
+/* Image Container - Fixed centered position (UPDATED) */
 .image-container {
     position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 0; /* Changed from top: 0 */
+    left: 0;
+    /* transform: translate(-50%, -50%); Changed from translateX(-50%) */
     z-index: 100;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.5s ease;
+    transition: opacity 0.3s ease;
     width: 100%;
     max-width: 1200px;
     height: 100vh;
@@ -217,6 +218,7 @@ nav {
     justify-content: center;
 }
 
+/* Keep ALL your existing CSS below this point unchanged */
 .image-container.visible {
     opacity: 1;
 }
@@ -334,7 +336,6 @@ nav {
     will-change: clip-path;
 }
 
-/* Desktop: Full viewport height */
 @media (min-width: 769px) {
     .clipping-image {
         max-height: 100vh;
@@ -344,7 +345,6 @@ nav {
     }
 }
 
-/* Mobile: Full viewport width */
 @media (max-width: 768px) {
     .clipping-image {
         max-width: 100vw;
