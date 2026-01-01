@@ -26,8 +26,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let isScrollLocked = false;
     let scrollTimeout = null;
     let lastScrollPosition = window.scrollY;
-    let scrollVelocity = 0;
-    let lastScrollTime = Date.now();
+    let scrollDirection = 'none';
+    let isSnapping = false;
+    let hasJustSnapped = false; // Prevent immediate re-snap
     const TRANSITION_DURATION = 800;
     
     // Create scroll lock indicator
@@ -103,95 +104,153 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 100);
     }
     
-    // Check if section is in viewport (more permissive for fast scrolling)
-    function isSectionInViewport() {
+    // Check if we're close enough to the section to snap to it
+    function shouldSnapToSection() {
+        if (!imageRevealSection || isSnapping || hasJustSnapped) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        
+        // If section is partially in view (30-70% range), snap to it
+        const sectionTop = rect.top;
+        const sectionBottom = rect.bottom;
+        const sectionHeight = sectionBottom - sectionTop;
+        
+        // Check if any significant part of section is in viewport
+        const visibleHeight = Math.min(sectionBottom, viewportHeight) - Math.max(sectionTop, 0);
+        const visiblePercentage = (visibleHeight / Math.min(sectionHeight, viewportHeight)) * 100;
+        
+        return visiblePercentage > 30 && visiblePercentage < 100;
+    }
+    
+    // Check if section is fully in viewport (for locking)
+    function isSectionFullyInViewport() {
         if (!imageRevealSection) return false;
         
         const rect = imageRevealSection.getBoundingClientRect();
         const viewportHeight = window.innerHeight;
         
-        // More permissive check for fast scrolling
-        // Check if any part of the section is in viewport
-        return rect.top < viewportHeight * 0.8 && rect.bottom > viewportHeight * 0.2;
+        // Check if section top is at or near 0 and bottom is at or near viewport height
+        return rect.top >= -10 && rect.top <= 10 && 
+               rect.bottom >= viewportHeight - 10 && rect.bottom <= viewportHeight + 10;
     }
     
-    // Check if we're entering the section from above
-    function isEnteringSectionFromTop() {
-        if (!imageRevealSection) return false;
+    // Check if we should unlock when scrolling up from first image
+    function shouldUnlockForUpScroll() {
+        if (!imageRevealSection || !isScrollLocked || currentImageIndex !== 0) return false;
+        
+        const rect = imageRevealSection.getBoundingClientRect();
+        
+        // If scrolling up and section is moving out of view (top is positive)
+        return scrollDirection === 'up' && rect.top > 50;
+    }
+    
+    // Check if we should unlock when scrolling down from last image
+    function shouldUnlockForDownScroll() {
+        if (!imageRevealSection || !isScrollLocked || currentImageIndex !== images.length - 1) return false;
         
         const rect = imageRevealSection.getBoundingClientRect();
         const viewportHeight = window.innerHeight;
         
-        // If top of section is in the upper half of viewport
-        return rect.top >= 0 && rect.top < viewportHeight * 0.5;
-    }
-    
-    // Check if we're at the section (more accurate for fast scrolling)
-    function isAtSection() {
-        if (!imageRevealSection) return false;
-        
-        const rect = imageRevealSection.getBoundingClientRect();
-        const viewportHeight = window.innerHeight;
-        
-        // Check if section occupies majority of viewport
-        const sectionHeight = rect.bottom - rect.top;
-        const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
-        
-        return visibleHeight >= viewportHeight * 0.7; // 70% of viewport
-    }
-    
-    // Check if we've scrolled past the section
-    function isScrolledPastSection() {
-        if (!imageRevealSection) return false;
-        
-        const rect = imageRevealSection.getBoundingClientRect();
-        // If section top is above viewport (we've passed it)
-        return rect.top < -100;
-    }
-    
-    // Check if we're above the section (scrolling back up)
-    function isAboveSection() {
-        if (!imageRevealSection) return false;
-        
-        const rect = imageRevealSection.getBoundingClientRect();
-        // If section bottom is below viewport (we're above it)
-        return rect.bottom > window.innerHeight + 100;
+        // If scrolling down and section is moving out of view (bottom is negative)
+        return scrollDirection === 'down' && rect.bottom < viewportHeight - 50;
     }
     
     // Force lock to section (snap to it)
     function snapToSection() {
-        console.log('Snapping to section...');
+        if (isSnapping) return;
         
-        // Immediately lock scroll
-        if (!isScrollLocked) {
-            lockScroll();
-        }
+        console.log('Snapping to image reveal section...');
+        isSnapping = true;
+        hasJustSnapped = true;
         
-        // Snap to section smoothly
-        imageRevealSection.scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'start'
+        // Prevent body scroll during snap
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '100vh';
+        document.body.style.width = '100%';
+        
+        // Calculate exact scroll position to center the section
+        const sectionTop = imageRevealSection.offsetTop;
+        const headerHeight = 80; // Approximate header height
+        
+        // Scroll to exact position (accounting for header)
+        window.scrollTo({
+            top: sectionTop - headerHeight,
+            behavior: 'smooth'
         });
         
-        // Reset image to first one
-        if (currentImageIndex !== 0) {
-            showImageImmediately(0);
+        // Lock scroll after snap
+        setTimeout(() => {
+            if (!isScrollLocked) {
+                lockScroll();
+            }
+            isSnapping = false;
+            
+            // Reset hasJustSnapped after a delay to prevent immediate re-snap
+            setTimeout(() => {
+                hasJustSnapped = false;
+            }, 500);
+        }, 300); // Wait for scroll animation
+    }
+    
+    // Snap to previous section (when scrolling up from first image)
+    function snapToPreviousSection() {
+        if (isSnapping) return;
+        
+        console.log('Snapping to previous section...');
+        isSnapping = true;
+        
+        unlockScroll();
+        
+        // Scroll to previous section (about me section)
+        const prevSection = document.getElementById('section-about');
+        if (prevSection) {
+            const prevSectionBottom = prevSection.offsetTop + prevSection.offsetHeight;
+            const viewportHeight = window.innerHeight;
+            
+            // Scroll to show bottom of previous section
+            window.scrollTo({
+                top: prevSectionBottom - viewportHeight + 100, // 100px padding
+                behavior: 'smooth'
+            });
         }
+        
+        setTimeout(() => {
+            isSnapping = false;
+        }, 800);
+    }
+    
+    // Snap to next section (when scrolling down from last image)
+    function snapToNextSection() {
+        if (isSnapping) return;
+        
+        console.log('Snapping to next section...');
+        isSnapping = true;
+        
+        unlockScroll();
+        
+        // Scroll to next section (work section)
+        const nextSection = document.getElementById('section-work');
+        if (nextSection) {
+            const headerHeight = 80;
+            
+            window.scrollTo({
+                top: nextSection.offsetTop - headerHeight,
+                behavior: 'smooth'
+            });
+        }
+        
+        setTimeout(() => {
+            isSnapping = false;
+        }, 800);
     }
     
     // Animate transition: current clips up, next reveals up
     function animateTransitionToNext() {
         if (isTransitioning || currentImageIndex >= images.length - 1) {
-            // If on last image, unlock scroll and go to next section
+            // If on last image, snap to next section
             if (currentImageIndex >= images.length - 1 && !isTransitioning) {
-                unlockScroll();
-                // Scroll to next section
-                const nextSection = document.getElementById('section-work');
-                if (nextSection) {
-                    setTimeout(() => {
-                        nextSection.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                }
+                snapToNextSection();
             }
             return;
         }
@@ -217,7 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentImg.style.clipPath = 'inset(0% 0% 100% 0%)'; // Clip up out of view
             nextImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
             
-            // Update nav title only (no image label)
+            // Update nav title
             const labels = ['Experiences', 'Details', 'Tech Stack'];
             navTitle.textContent = labels[newIndex];
             
@@ -252,16 +311,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Animate transition: current clips down, previous reveals down
     function animateTransitionToPrevious() {
         if (isTransitioning || currentImageIndex <= 0) {
-            // If on first image, unlock scroll and go to previous section
-            if (currentImageIndex <= 0 && !isTransitioning) {
-                unlockScroll();
-                // Scroll to previous section (buffer section)
-                const prevSection = document.getElementById('section-buffer');
-                if (prevSection) {
-                    setTimeout(() => {
-                        prevSection.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                }
+            // If on first image and scrolling up, snap to previous section
+            if (currentImageIndex <= 0 && !isTransitioning && scrollDirection === 'up') {
+                snapToPreviousSection();
             }
             return;
         }
@@ -287,7 +339,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentImg.style.clipPath = 'inset(100% 0% 0% 0%)'; // Clip down out of view
             prevImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
             
-            // Update nav title only (no image label)
+            // Update nav title
             const labels = ['Experiences', 'Details', 'Tech Stack'];
             navTitle.textContent = labels[newIndex];
             
@@ -337,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Update nav title only (no image label)
+        // Update nav title
         const labels = ['Experiences', 'Details', 'Tech Stack'];
         navTitle.textContent = labels[index];
         
@@ -417,20 +469,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Calculate scroll velocity
-    function calculateScrollVelocity(currentScroll) {
-        const now = Date.now();
-        const timeDelta = now - lastScrollTime;
-        const scrollDelta = currentScroll - lastScrollPosition;
+    // Update scroll direction
+    function updateScrollDirection(currentScroll) {
+        const delta = currentScroll - lastScrollPosition;
         
-        if (timeDelta > 0) {
-            scrollVelocity = Math.abs(scrollDelta / timeDelta);
+        if (delta > 0) {
+            scrollDirection = 'down';
+        } else if (delta < 0) {
+            scrollDirection = 'up';
         }
         
-        lastScrollTime = now;
         lastScrollPosition = currentScroll;
-        
-        return scrollVelocity;
     }
     
     // Handle touch events for mobile
@@ -468,7 +517,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const sections = [
             { id: 'section-hero', name: 'Welcome' },
             { id: 'section-about', name: 'About Me' },
-            { id: 'section-buffer', name: 'Continue' },
             { id: 'image-reveal', name: 'Image Reveal' },
             { id: 'section-work', name: 'Work Experience' },
             { id: 'section-education', name: 'Education' },
@@ -495,62 +543,55 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Update debug
         debugSection.textContent = currentSectionName;
-        debugScroll.textContent = `${Math.round(scrollY)}px`;
+        debugScroll.textContent = `${Math.round(scrollY)}px (${scrollDirection})`;
         
         // Only update nav title if NOT in image section OR if scroll is unlocked
         if (currentSectionName !== 'Image Reveal' || !isScrollLocked) {
             // Use section name for other sections
             navTitle.textContent = currentSectionName;
         }
-        // Note: Nav title for image section is updated in animation functions
     }
     
-    // Main scroll handler with velocity detection
+    // Main scroll handler
     function handleScroll() {
         const currentScroll = window.scrollY || window.pageYOffset;
         
-        // Calculate scroll velocity
-        const velocity = calculateScrollVelocity(currentScroll);
+        // Update scroll direction
+        updateScrollDirection(currentScroll);
         
         // Update debug
         updateScrollInfo();
         
-        // Check section conditions
-        const sectionInView = isSectionInViewport();
-        const atSection = isAtSection();
-        const enteringFromTop = isEnteringSectionFromTop();
-        const sectionPassed = isScrolledPastSection();
-        const aboveSection = isAboveSection();
+        // Check if we should snap to section
+        const shouldSnap = shouldSnapToSection();
+        const isFullyInView = isSectionFullyInViewport();
         
-        // Determine if we should lock/unlock
-        if ((sectionInView || atSection || enteringFromTop) && !isScrollLocked) {
-            // Section is in view - lock scroll immediately
-            lockScroll();
-            
-            // If scrolling fast, snap to section
-            if (velocity > 2) { // High velocity threshold
-                setTimeout(snapToSection, 50);
-            }
-        } else if ((!sectionInView && isScrollLocked && (sectionPassed || aboveSection))) {
-            // Section left view, passed, or above - unlock scroll
-            unlockScroll();
-        } else if (isScrollLocked && !sectionInView && !atSection && !enteringFromTop) {
-            // If locked but section is not in view at all, unlock
-            unlockScroll();
+        // Check if we should unlock
+        const shouldUnlockUp = shouldUnlockForUpScroll();
+        const shouldUnlockDown = shouldUnlockForDownScroll();
+        
+        // Handle snapping to section
+        if (shouldSnap && !isScrollLocked && !isSnapping) {
+            console.log('Should snap to section, triggering...');
+            setTimeout(snapToSection, 50);
         }
-    }
-    
-    // More responsive scroll handler (less debounce for fast scrolling)
-    function handleScrollResponsive() {
-        if (scrollTimeout) clearTimeout(scrollTimeout);
         
-        // Process immediately for fast scrolling detection
-        handleScroll();
+        // Handle locking when section is fully in view
+        if (isFullyInView && !isScrollLocked && !isSnapping) {
+            lockScroll();
+        }
         
-        // Still debounce for performance, but with shorter delay
-        scrollTimeout = setTimeout(() => {
-            handleScroll();
-        }, 50);
+        // Handle unlocking
+        if ((shouldUnlockUp || shouldUnlockDown) && isScrollLocked && !isSnapping) {
+            unlockScroll();
+            
+            // Snap to appropriate section
+            if (shouldUnlockUp) {
+                setTimeout(snapToPreviousSection, 100);
+            } else if (shouldUnlockDown) {
+                setTimeout(snapToNextSection, 100);
+            }
+        }
     }
     
     // Initialize everything
@@ -561,7 +602,7 @@ document.addEventListener('DOMContentLoaded', function() {
         initImages();
         
         // Add event listeners
-        window.addEventListener('scroll', handleScrollResponsive);
+        window.addEventListener('scroll', handleScroll);
         window.addEventListener('wheel', handleWheel, { passive: false });
         
         // Touch events for mobile
@@ -574,7 +615,7 @@ document.addEventListener('DOMContentLoaded', function() {
             updateScrollInfo();
             
             // If already in section on load, lock it
-            if (isSectionInViewport() || isAtSection()) {
+            if (isSectionFullyInViewport()) {
                 lockScroll();
             }
         }, 500);
