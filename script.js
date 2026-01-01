@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('image2'),
         document.getElementById('image3')
     ];
-    const imageLabel = document.getElementById('image-label');
     const navTitle = document.getElementById('nav-title');
     
     // Debug elements
@@ -37,8 +36,11 @@ document.addEventListener('DOMContentLoaded', function() {
     lockIndicator.innerHTML = '<i class="fas fa-mouse-pointer"></i> Scroll to change images';
     document.body.appendChild(lockIndicator);
     
+    // Debug panel setup - Start hidden
+    let debugVisible = false;
+    debugOverlay.classList.add('hidden');
+    
     // Toggle debug overlay
-    let debugVisible = true;
     debugToggle.addEventListener('click', function() {
         debugVisible = !debugVisible;
         debugOverlay.classList.toggle('hidden');
@@ -46,6 +48,32 @@ document.addEventListener('DOMContentLoaded', function() {
             '<i class="fas fa-code"></i> Hide Debug' : 
             '<i class="fas fa-code"></i> Show Debug';
     });
+    
+    // Console commands for debug panel
+    window.showDebug = function() {
+        debugVisible = true;
+        debugOverlay.classList.remove('hidden');
+        debugToggle.innerHTML = '<i class="fas fa-code"></i> Hide Debug';
+        console.log('Debug panel shown. Type hideDebug() to hide.');
+    };
+    
+    window.hideDebug = function() {
+        debugVisible = false;
+        debugOverlay.classList.add('hidden');
+        debugToggle.innerHTML = '<i class="fas fa-code"></i> Show Debug';
+        console.log('Debug panel hidden. Type showDebug() to show.');
+    };
+    
+    window.toggleDebug = function() {
+        debugToggle.click();
+    };
+    
+    // Console help message
+    console.log('%c=== Debug Controls ===', 'color: #64ffda; font-weight: bold;');
+    console.log('%cType showDebug() to show debug panel', 'color: #a8b2d1;');
+    console.log('%cType hideDebug() to hide debug panel', 'color: #a8b2d1;');
+    console.log('%cType toggleDebug() to toggle debug panel', 'color: #a8b2d1;');
+    console.log('%cOr click the "Toggle Debug" button in the panel', 'color: #a8b2d1;');
     
     // Initialize images with proper clipping states
     function initImages() {
@@ -189,9 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
             currentImg.style.clipPath = 'inset(0% 0% 100% 0%)'; // Clip up out of view
             nextImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
             
-            // Update label
+            // Update nav title only (no image label)
             const labels = ['Experiences', 'Details', 'Tech Stack'];
-            imageLabel.textContent = labels[newIndex];
             navTitle.textContent = labels[newIndex];
             
             // Update debug
@@ -260,9 +287,8 @@ document.addEventListener('DOMContentLoaded', function() {
             currentImg.style.clipPath = 'inset(100% 0% 0% 0%)'; // Clip down out of view
             prevImg.style.clipPath = 'inset(0% 0% 0% 0%)'; // Reveal fully
             
-            // Update label
+            // Update nav title only (no image label)
             const labels = ['Experiences', 'Details', 'Tech Stack'];
-            imageLabel.textContent = labels[newIndex];
             navTitle.textContent = labels[newIndex];
             
             // Update debug
@@ -311,9 +337,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Update label
+        // Update nav title only (no image label)
         const labels = ['Experiences', 'Details', 'Tech Stack'];
-        imageLabel.textContent = labels[index];
         navTitle.textContent = labels[index];
         
         // Restore transitions after a moment
@@ -472,14 +497,12 @@ document.addEventListener('DOMContentLoaded', function() {
         debugSection.textContent = currentSectionName;
         debugScroll.textContent = `${Math.round(scrollY)}px`;
         
-        // Update nav title based on current image when in image section
-        if (currentSectionName === 'Image Reveal' && isScrollLocked) {
-            const labels = ['Experiences', 'Details', 'Tech Stack'];
-            navTitle.textContent = labels[currentImageIndex];
-        } else if (currentSectionName !== 'Image Reveal') {
+        // Only update nav title if NOT in image section OR if scroll is unlocked
+        if (currentSectionName !== 'Image Reveal' || !isScrollLocked) {
             // Use section name for other sections
             navTitle.textContent = currentSectionName;
         }
+        // Note: Nav title for image section is updated in animation functions
     }
     
     // Main scroll handler with velocity detection
