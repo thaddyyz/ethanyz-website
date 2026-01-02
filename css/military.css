@@ -1,0 +1,474 @@
+/* 
+.military-card-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.military-glass-card {
+    background: linear-gradient(
+        135deg,
+        rgba(17, 34, 64, 0.95),
+        rgba(30, 60, 114, 0.95)
+    );
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 40px;
+    border: 1px solid rgba(100, 255, 218, 0.15);
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: 
+        "header header"
+        "subheader subheader"
+        "image content";
+    gap: 30px;
+    position: relative;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    min-height: 450px;
+    align-items: start;
+}
+
+.military-glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.military-card-header {
+    grid-area: header;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 5px;
+}
+
+.military-card-header h3 {
+    font-size: 1.5rem;
+    color: #64ffda;
+    flex: 1;
+    margin-right: 20px;
+}
+
+.military-card-date {
+    background-color: rgba(100, 255, 218, 0.15);
+    color: #64ffda;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.military-card-subheader {
+    grid-area: subheader;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.military-card-subheader h4 {
+    font-size: 1.1rem;
+    color: #a8b2d1;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+.military-card-image {
+    grid-area: image;
+    height: 100%;
+    min-height: 300px;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0;
+    align-self: stretch;
+}
+
+.military-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.military-glass-card:hover .military-card-image img {
+    transform: scale(1.05);
+}
+
+.military-card-content {
+    grid-area: content;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: #a8b2d1;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+}
+
+.military-card-content p {
+    margin-bottom: 20px;
+}
+
+.military-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.military-tag {
+    background: rgba(100, 255, 218, 0.15);
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    color: #64ffda;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.military-card-link {
+    display: inline-flex;
+    align-items: center;
+    color: #64ffda;
+    text-decoration: none;
+    font-weight: 600;
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    align-self: flex-start;
+    transition: color 0.3s ease;
+}
+
+.military-card-link:hover {
+    color: #52d9b9;
+}
+
+.military-card-link i {
+    margin-left: 8px;
+    transition: transform 0.3s ease;
+}
+
+.military-card-link:hover i {
+    transform: translateX(5px);
+}
+
+
+.military-glass-card::before {
+    content: '';
+    position: absolute;
+    top: 120px;
+    bottom: 40px;
+    left: calc(33.33% + 15px);
+    width: 1px;
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        rgba(100, 255, 218, 0.2),
+        rgba(100, 255, 218, 0.2),
+        transparent
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.military-glass-card:hover::before {
+    opacity: 1;
+}
+
+@media (max-width: 992px) {
+    .military-glass-card {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        grid-template-areas: 
+            "header"
+            "subheader"
+            "image"
+            "content";
+        gap: 20px;
+        padding: 25px;
+        min-height: auto;
+    }
+    
+    .military-card-image {
+        height: 250px;
+        min-height: 400px;
+        max-width: 320px;
+    }
+    
+    .military-glass-card::before {
+        display: none;
+    }
+    
+    .military-card-header {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .military-card-header h3 {
+        margin-right: 0;
+    }
+} */
+
+.military-card-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.military-glass-card {
+    /* Match existing glass-card properties exactly */
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 25px; /* Same as .glass-card */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    min-height: 550px; /* Same as .glass-card */
+    
+    /* Grid layout for image-left with proper horizontal gap */
+    display: grid;
+    grid-template-columns: 300px 1fr; /* Fixed width image column, flexible content */
+    grid-template-rows: auto auto 1fr; /* Auto for headers, 1fr for content row */
+    grid-template-areas: 
+        "header header"
+        "subheader subheader"
+        "image content";
+    gap: 30px; /* This gives horizontal AND vertical gaps */
+    align-items: start;
+}
+
+.military-glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Header - Match existing .card-header */
+.military-card-header {
+    grid-area: header;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 5px;
+}
+
+.military-card-header h3 {
+    font-size: 1.2rem; /* Same as .card-header h3 */
+    color: #ccd6f6; /* Same as .card-header h3 */
+    flex: 1;
+    margin-right: 15px;
+    font-weight: 600;
+}
+
+.military-card-date {
+    background-color: rgba(100, 255, 218, 0.1); /* Same as .card-date */
+    color: #64ffda; /* Same as .card-date */
+    padding: 5px 12px; /* Same as .card-date */
+    border-radius: 20px; /* Same as .card-date */
+    font-size: 0.9rem; /* Same as .card-date */
+    font-weight: 600; /* Same as .card-date */
+    white-space: nowrap;
+}
+
+/* Subheader - Match existing .card-subheader */
+.military-card-subheader {
+    grid-area: subheader;
+    width: 100%;
+    margin-top: 1px; /* Same as original */
+    margin-bottom: 10px; /* Same as original */
+}
+
+.military-card-subheader h4 {
+    font-size: 0.9rem; /* Same as .card-subheader h4 */
+    color: #64ffda; /* Same as .card-subheader h4 */
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+/* Image on Left - Match existing .card-image but adjusted for portrait */
+.military-card-image {
+    grid-area: image;
+    width: 100%;
+    height: 100%;
+    min-height: 350px; /* Taller for portrait ratio */
+    border-radius: 10px; /* Same as .card-image */
+    overflow: hidden; /* Same as .card-image */
+    margin: 0;
+    align-self: start; /* Align to top of grid cell */
+}
+
+.military-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Same as .card-image img */
+    transition: transform 0.3s ease; /* Same as .card-image img */
+}
+
+.military-glass-card:hover .military-card-image img {
+    transform: scale(1.05); /* Same hover effect */
+}
+
+/* Content on Right - Match existing .card-content */
+.military-card-content {
+    grid-area: content;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: #a8b2d1; /* Same as .card-content */
+    line-height: 1.6; /* Same as .card-content */
+    margin: 0;
+    padding: 0;
+    flex-grow: 1;
+    min-height: 300px; /* Ensure minimum height */
+}
+
+.military-card-content p {
+    margin-bottom: 15px;
+    font-size: 1rem; /* Match existing text size */
+}
+
+/* Tags - Match existing .card-tags */
+.military-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px; /* Same as .card-tags */
+    margin: 15px 0 20px 0; /* Same as .card-tags */
+}
+
+.military-tag {
+    background-color: rgba(100, 255, 218, 0.1); /* Same as .tag */
+    color: #64ffda; /* Same as .tag */
+    padding: 8px 16px; /* Same as .tag */
+    border-radius: 20px; /* Same as .tag */
+    font-size: 0.9rem; /* Same as .tag */
+    font-weight: 500; /* Same as .tag */
+}
+
+/* Link - Match existing .card-link but adjust positioning */
+.military-card-link {
+    display: inline-flex;
+    align-items: center;
+    color: #64ffda; /* Same as .card-link */
+    text-decoration: none;
+    font-weight: 600; /* Same as .card-link */
+    transition: color 0.3s ease; /* Same as .card-link */
+    margin-top: auto;
+    padding-top: 15px; /* Adjusted for bottom placement */
+    align-self: flex-start;
+    border-top: 1px solid rgba(255, 255, 255, 0.05); /* Same as .card-link */
+}
+
+.military-card-link:hover {
+    color: #52d9b9; /* Same as .card-link:hover */
+}
+
+.military-card-link i {
+    margin-left: 8px; /* Same as .card-link i */
+    transition: transform 0.3s ease; /* Same as .card-link i */
+}
+
+.military-card-link:hover i {
+    transform: translateX(5px); /* Same as .card-link:hover i */
+}
+
+/* Optional subtle military accent */
+.military-glass-card {
+    border-left: 3px solid rgba(100, 255, 218, 0.2);
+}
+
+/* Horizontal separator for desktop - between image and content */
+@media (min-width: 993px) {
+    .military-glass-card {
+        /* Horizontal gap between image and content is handled by grid gap: 30px */
+    }
+    
+    /* Optional: Add a visual separator line */
+    .military-glass-card::after {
+        content: '';
+        position: absolute;
+        top: 120px; /* Below headers */
+        bottom: 40px;
+        left: calc(300px + 15px); /* Image width + half gap */
+        width: 1px;
+        background: linear-gradient(
+            to bottom,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            rgba(255, 255, 255, 0.1),
+            transparent
+        );
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .military-glass-card:hover::after {
+        opacity: 1;
+    }
+}
+
+/* Mobile Layout - Stack vertically with taller portrait image */
+@media (max-width: 992px) {
+    .military-glass-card {
+        grid-template-columns: 1fr; /* Single column */
+        grid-template-rows: auto auto auto auto; /* Header, subheader, image, content */
+        grid-template-areas: 
+            "header"
+            "subheader"
+            "image"
+            "content";
+        gap: 20px; /* Smaller gap on mobile */
+        min-height: auto;
+        padding: 20px; /* Slightly smaller padding on mobile */
+    }
+    
+    /* Make image taller for portrait ratio on mobile */
+    .military-card-image {
+        height: 350px; /* Tall portrait height */
+        min-height: 350px; /* Fixed height for portrait */
+        width: 100%;
+        max-width: 300px; /* Limit width to maintain aspect */
+        margin: 0 auto; /* Center the image */
+        align-self: center;
+    }
+    
+    /* Adjust header layout on mobile */
+    .military-card-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 0;
+    }
+    
+    .military-card-header h3 {
+        margin-right: 0;
+        margin-bottom: 5px;
+        font-size: 1.3rem; /* Slightly larger on mobile */
+    }
+    
+    .military-card-date {
+        align-self: flex-start; /* Align date to left */
+    }
+    
+    .military-card-content {
+        min-height: auto; /* Remove min-height on mobile */
+    }
+    
+    /* Hide the separator line on mobile */
+    .military-glass-card::after {
+        display: none;
+    }
+}
+
+/* For very small screens */
+@media (max-width: 576px) {
+    .military-glass-card {
+        padding: 18px;
+    }
+    
+    .military-card-image {
+        height: 300px; /* Slightly smaller on very small screens */
+        min-height: 300px;
+        max-width: 250px; /* Even narrower on small screens */
+    }
+    
+    .military-card-header h3 {
+        font-size: 1.1rem;
+    }
+}
