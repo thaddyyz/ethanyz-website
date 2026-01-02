@@ -431,7 +431,7 @@ body.scroll-locked {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 20px;
+    margin-bottom: 5px;
 }
 
 .card-header h3 {
@@ -447,6 +447,38 @@ body.scroll-locked {
     border-radius: 20px;
     font-size: 0.9rem;
     font-weight: 600;
+}
+
+/* Add subheader styling */
+.card-subheader {
+    width: 100%;
+    margin-top: 1px;
+    margin-bottom: 10px;
+}
+
+.card-subheader h4 {
+    font-size: 0.9rem;
+    color: #64ffda;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+/* Adjust card image margin when subheader is present */
+.card-header + .card-image {
+    /* margin-top: 5px; Reduce space when subheader exists */
+    margin-bottom: 1px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-subheader h4 {
+        font-size: 0.9rem;
+    }
+    
+    .card-subheader .subheader-type {
+        font-size: 0.8rem;
+        padding: 2px 8px;
+    }
 }
 
 .card-image {
@@ -468,7 +500,7 @@ body.scroll-locked {
     transform: scale(1.05);
 }
 
-.card-content {
+/* .card-content {
     color: #a8b2d1;
     line-height: 1.6;
     margin-bottom: 20px;
@@ -496,6 +528,51 @@ body.scroll-locked {
 
 .card-link i {
     margin-left: 8px;
+} */
+.card-content {
+    color: #a8b2d1;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+}
+
+.card-content > p {
+    flex-grow: 1; /* Makes paragraph grow to push everything down */
+}
+
+.card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 15px 0 20px 0;
+}
+
+.card-link {
+    display: inline-flex;
+    align-items: center;
+    color: #64ffda;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.3s ease;
+    margin-top: auto; /* This pushes it to the bottom */
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    align-self: flex-start; /* Align to left */
+}
+
+.card-link:hover {
+    color: #52d9b9;
+}
+
+.card-link i {
+    margin-left: 8px;
+    transition: transform 0.3s ease;
+}
+
+.card-link:hover i {
+    transform: translateX(5px);
 }
 
 /* Grid layouts */
