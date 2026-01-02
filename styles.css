@@ -407,6 +407,14 @@ body.scroll-locked {
     margin-top: 40px;
 }
 
+/* .glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 25px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+} */
 .glass-card {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
@@ -414,6 +422,10 @@ body.scroll-locked {
     padding: 25px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative; /* This is key */
+    min-height: 550px; /* Set a minimum height for consistency */
+    display: flex;
+    flex-direction: column;
 }
 
 .glass-card:hover {
@@ -532,14 +544,8 @@ body.scroll-locked {
 .card-content {
     color: #a8b2d1;
     line-height: 1.6;
-    margin-bottom: 20px;
-    display: flex;
-    flex-direction: column;
-    min-height: 200px;
-}
-
-.card-content > p {
-    flex-grow: 1; /* Makes paragraph grow to push everything down */
+    flex-grow: 1; /* Takes remaining space */
+    margin-bottom: 60px; /* Space for absolute positioned button */
 }
 
 .card-tags {
@@ -556,10 +562,13 @@ body.scroll-locked {
     text-decoration: none;
     font-weight: 600;
     transition: color 0.3s ease;
-    margin-top: auto; /* This pushes it to the bottom */
-    padding-top: 15px;
+    /* margin-top: auto;
+    padding-top: 15px; */
+    position: absolute;
+    bottom: 25px; /* Match card padding */
+    left: 25px; /* Match card padding */
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    align-self: flex-start; /* Align to left */
+    /* align-self: flex-start; */
 }
 
 .card-link:hover {
