@@ -146,7 +146,9 @@ const modalData = {
         title: 'Diploma of Engineering in Engineering Science',
         date: '2015 - 2018',
         images: [
-            './images/np1.jpg'
+            './images/ngeeannpoly.png',
+            './images/np2.png',
+            './images/np3.png'
         ],
         sections: [
             {
@@ -176,7 +178,9 @@ const modalData = {
         title: 'Bachelors in Computer Engineering',
         date: '2020 - 2023',
         images: [
-            './images/nus1.jpg'
+            './images/nus1.jpg',
+            './images/nus2.jpg',
+            './images/nus3.jpg'
         ],
         sections: [
             {
@@ -257,12 +261,12 @@ const modalData = {
         ],
         links: []
     },
-    'project-2': {
+    'project-4': {
         title: 'Currentplex',
         date: '2021',
         images: [
             './images/currentplex1.jpg',
-            './images/cp2.png'
+            './images/cp2.jpg'
         ],
         sections: [
             {
@@ -343,7 +347,7 @@ const modalData = {
             }
         ]
     },
-    'project-4': {
+    'project-2': {
         title: 'Autonomous Wheelchair',
         date: '2018',
         images: [
@@ -402,8 +406,8 @@ const modalData = {
         title: 'HIMARS Platoon Commander',
         date: '2018 - 2020',
         images: [
-            './images/army2.jpeg',
-            './images/army3.jpeg'
+            './images/army2.jpg',
+            './images/army3.jpg'
         ],
         sections: [
             {
@@ -417,22 +421,16 @@ const modalData = {
                 ]
             },
             {
-                title: 'Leadership Experience',
+                title: 'Valuable Experience',
                 icon: 'fas fa-users',
                 items: [
-                    'Mentored 5 junior officers in leadership and tactical planning',
-                    'Implemented safety reporting systems',
-                    'Coordinated multinational training exercises',
-                    'Developed digital SOPs adopted battalion-wide'
+                    'Mentored junior officers in practical leadership and planning',
+                    'Found the safety reporting process to be tedious and developed a faster solution',
+                    'Learned about leadership, not as a manager but as a team member'
                 ]
             }
         ],
         links: [
-            {
-                text: 'View Service Details',
-                url: '#',
-                icon: 'fas fa-scroll'
-            }
         ]
     },
     'hobby-1': {
