@@ -400,7 +400,13 @@ const modalData = {
                 ]
             }
         ],
-        links: []
+        links: [
+            {
+                text: 'My ProjectShare Profile',
+                url: 'https://project-share-webapp.vercel.app/3stE8Q3MGnoW0Z-yDsPQYP3dasaoNMinbryW2Mutf43FzUghwL1_Kex_9MULi1628y0yx0XwoT1ofwPcTjZrJg',
+                // icon: 'fas fa-flag-checkered'
+            }
+        ]
     },
     'military': {
         title: 'HIMARS Platoon Commander',
